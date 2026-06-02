@@ -17,9 +17,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imroc/req/v3/internal/header"
-	"github.com/imroc/req/v3/internal/tests"
-	"github.com/imroc/req/v3/pkg/altsvc"
+	"github.com/jwwsjlm/req/v3/internal/header"
+	"github.com/jwwsjlm/req/v3/internal/tests"
+	"github.com/jwwsjlm/req/v3/pkg/altsvc"
 	"github.com/quic-go/quic-go"
 	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/publicsuffix"

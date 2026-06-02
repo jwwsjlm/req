@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/imroc/req/v3/http2"
+	"github.com/jwwsjlm/req/v3/http2"
 	"github.com/quic-go/quic-go"
 	utls "github.com/refraction-networking/utls"
 )

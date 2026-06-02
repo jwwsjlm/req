@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 	"time"
 
-	"github.com/imroc/req/v3/internal/http3"
+	"github.com/jwwsjlm/req/v3/internal/http3"
 	"github.com/quic-go/quic-go"
 )
 

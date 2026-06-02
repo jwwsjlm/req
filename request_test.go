@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imroc/req/v3/internal/header"
-	"github.com/imroc/req/v3/internal/tests"
+	"github.com/jwwsjlm/req/v3/internal/header"
+	"github.com/jwwsjlm/req/v3/internal/tests"
 )
 
 func TestMustSendMethods(t *testing.T) {

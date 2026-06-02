@@ -1,519 +1,254 @@
 # req
 
-<p align="center">
-    <p align="center"><img src="https://req.cool/images/req.png"></p>
-    <p align="center"><strong>Simple Go HTTP client with Black Magic</strong></p>
-    <p align="center">
-        <a href="https://github.com/imroc/req/actions/workflows/ci.yml?query=branch%3Amaster"><img src="https://github.com/imroc/req/actions/workflows/ci.yml/badge.svg" alt="Build Status"></a>
-        <a href="https://goreportcard.com/report/github.com/imroc/req/v3"><img src="https://goreportcard.com/badge/github.com/imroc/req/v3" alt="Go Report Card"></a>
-        <a href="https://pkg.go.dev/github.com/imroc/req/v3"><img src="https://pkg.go.dev/badge/github.com/imroc/req/v3.svg"></a>
-        <a href="LICENSE"><img src="https://img.shields.io/github/license/imroc/req.svg" alt="License"></a>
-        <a href="https://github.com/imroc/req/releases"><img src="https://img.shields.io/github/v/release/imroc/req?display_name=tag&sort=semver" alt="GitHub Releases"></a>
-        <a href="https://github.com/avelino/awesome-go"><img src="https://awesome.re/mentioned-badge.svg" alt="Mentioned in Awesome Go"></a>
-    </p> 
-</p>
+这个仓库是我自用的 `req` 增强版，基于 [imroc/req](https://github.com/imroc/req) 做扩展，重点加强浏览器伪装、HTTP/3、TLS/JA3 指纹、HTTP/2/HTTP/3 细节控制和一些日常使用体验。
 
-## Documentation
+原版文档仍然可以参考：[https://req.cool](https://req.cool)
 
-Full documentation is available on the official website: https://req.cool.
+## 主要能力
 
-## <a name="Features">Features</a>
+- 简洁链式 API，保留 `req.C().R().Get(...)` 这种写法。
+- 支持 HTTP/1.1、HTTP/2、HTTP/3，可以自动协商，也可以强制指定。
+- 浏览器伪装增强：Chrome、Firefox、Safari，并支持不同系统 profile。
+- 支持 uTLS TLS 指纹、JA3、自定义 `ClientHelloSpec`。
+- HTTP/2 可控：SETTINGS、header order、pseudo header order、priority、initial stream id。
+- HTTP/3 可控：SETTINGS、GREASE、Datagram、Extended CONNECT、QUICConfig、TLS profile、Alt-Svc 失败回退。
+- HTTP/3 QUIC 性能 profile：token reuse、keepalive、窗口大小、初始包大小。
+- 支持自定义 CookieJar factory，兼容 `func() http.CookieJar` 和旧的 `func() *cookiejar.Jar`。
+- 保留 req 原有的 debug、dump、retry、download、upload、middleware、自动 JSON/XML 等能力。
 
-* **Simple and Powerful**: Simple and easy to use, providing rich client-level and request-level settings, all of which are intuitive and chainable methods.
-* **Easy Debugging**: Powerful and convenient debug utilities, including debug logs, performance traces, and even dump the complete request and response content (see [Debugging](https://req.cool/docs/tutorial/debugging/)).
-* **Easy API Testing**: API testing can be done with minimal code, no need to explicitly create any Request or Client, or even to handle errors (See [Quick HTTP Test](https://req.cool/docs/tutorial/quick-test/))
-* **Smart by Default**: Detect and decode to utf-8 automatically if possible to avoid garbled characters (See [Auto Decode](https://req.cool/docs/tutorial/auto-decode/)), marshal request body and unmarshal response body automatically according to the Content-Type.
-* **Support Multiple HTTP Versions**: Support `HTTP/1.1`, `HTTP/2`, and `HTTP/3`, and can automatically detect the server side and select the optimal HTTP version for requests, you can also force the protocol if you want (See [Force HTTP version](https://req.cool/docs/tutorial/force-http-version/)).
-* **Advanced HTTP/3 Controls**: Tune HTTP/3 SETTINGS, QUIC datagrams, Extended CONNECT, response header limits, GREASE values, HTTP/3 TLS profiles, and optional H3-to-H2/H1 fallback for demanding interoperability and impersonation scenarios.
-* **Support Retry**: Support automatic request retry and is fully customizable (See [Retry](https://req.cool/docs/tutorial/retry/)).
-* **HTTP Fingerprinting**: Support browser impersonation, TLS fingerprints, JA3, ordered HTTP/2 settings, and header ordering, so that we can access websites that prohibit crawler programs by identifying http fingerprints (See [HTTP Fingerprint](https://req.cool/docs/tutorial/http-fingerprint/)).
-* **Multiple Authentication Methods**: You can use HTTP Basic Auth, Bearer Auth Token and Digest Auth out of box (see [Authentication](https://req.cool/docs/tutorial/authentication/)).
-* **Easy Download and Upload**: You can download and upload files with simple request settings, and even set a callback to show real-time progress (See [Download](https://req.cool/docs/tutorial/download/) and [Upload](https://req.cool/docs/tutorial/upload/)).
-* **Exportable**: `req.Transport` is exportable. Compared with `http.Transport`, it also supports HTTP3, dump content, middleware, etc. It can directly replace the Transport of `http.Client` in existing projects, and obtain more powerful functions with minimal code change.
-* **Extensible**: Support Middleware for Request, Response, Client and Transport (See [Request and Response Middleware](https://req.cool/docs/tutorial/middleware-for-request-and-response/)) and [Client and Transport Middleware](https://req.cool/docs/tutorial/middleware-for-client-and-transport/)).
+## 安装
 
-## <a name="Get-Started">Get Started</a>
-
-**Install**
-
-You first need [Go](https://go.dev/) installed (version 1.24+ is required), then you can use the below Go command to install req:
-
-``` sh
-go get github.com/imroc/req/v3
+```sh
+go get github.com/jwwsjlm/req/v3
 ```
 
-**Import**
+要求 Go `1.24+`。
 
-Import req to your code:
-
-```go
-import "github.com/imroc/req/v3"
-```
-
-**Basic Usage**
-
-```bash
-# assume the following codes in main.go file
-$ cat main.go
-```
-
-```go
-package main
-
-import (
-    "github.com/imroc/req/v3"
-)
-
-func main() {
-    req.DevMode() // Treat the package name as a Client, enable development mode
-    req.MustGet("https://httpbin.org/uuid") // Treat the package name as a Request, send GET request.
-
-    req.EnableForceHTTP1() // Force using HTTP/1.1
-    req.MustGet("https://httpbin.org/uuid")
-}
-```
-
-```bash
-$ go run main.go
-2022/05/19 10:05:07.920113 DEBUG [req] HTTP/2 GET https://httpbin.org/uuid
-:authority: httpbin.org
-:method: GET
-:path: /uuid
-:scheme: https
-user-agent: req/v3 (https://github.com/imroc/req/v3)
-accept-encoding: gzip
-
-:status: 200
-date: Thu, 19 May 2022 02:05:08 GMT
-content-type: application/json
-content-length: 53
-server: gunicorn/19.9.0
-access-control-allow-origin: *
-access-control-allow-credentials: true
-
-{
-  "uuid": "bd519208-35d1-4483-ad9f-e1555ae108ba"
-}
-
-2022/05/19 10:05:09.340974 DEBUG [req] HTTP/1.1 GET https://httpbin.org/uuid
-GET /uuid HTTP/1.1
-Host: httpbin.org
-User-Agent: req/v3 (https://github.com/imroc/req/v3)
-Accept-Encoding: gzip
-
-HTTP/1.1 200 OK
-Date: Thu, 19 May 2022 02:05:09 GMT
-Content-Type: application/json
-Content-Length: 53
-Connection: keep-alive
-Server: gunicorn/19.9.0
-Access-Control-Allow-Origin: *
-Access-Control-Allow-Credentials: true
-
-{
-  "uuid": "49b7f916-c6f3-49d4-a6d4-22ae93b71969"
-}
-```
-
-The sample code above is good for quick testing purposes, which use `DevMode()` to see request details, and send requests using global wrapper methods that use the default client behind the scenes to initiate the request.
-
-In production, it is recommended to explicitly create a client, and then use the same client to send all requests, please see other examples below.
-
-**Videos**
-
-The following is a series of video tutorials for req:
-
-* [Youtube Play List](https://www.youtube.com/watch?v=Dy8iph8JWw0&list=PLnW6i9cc0XqlhUgOJJp5Yf1FHXlANYMhF&index=2)
-* [BiliBili 播放列表](https://www.bilibili.com/video/BV14t4y1J7cm) (Chinese)
-
-**More**
-
-Check more introduction, tutorials, examples, best practices and API references on the [official website](https://req.cool/).
-
-## <a name="Simple-Get">Simple GET</a>
+## 基础用法
 
 ```go
 package main
 
 import (
 	"fmt"
-	"github.com/imroc/req/v3"
 	"log"
+
+	"github.com/jwwsjlm/req/v3"
 )
 
 func main() {
-	client := req.C() // Use C() to create a client.
-	resp, err := client.R(). // Use R() to create a request.
+	client := req.C()
+
+	resp, err := client.R().
+		SetHeader("Accept", "application/json").
 		Get("https://httpbin.org/uuid")
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(resp)
+
+	fmt.Println(resp.String())
 }
 ```
 
-```txt
-{
-  "uuid": "a4d4430d-0e5f-412f-88f5-722d84bc2a62"
-}
-```
+## 统一 Client
 
-## <a name="Advanced-Get">Advanced GET</a>
+自用时建议创建一个长期复用的 client，不要每次请求都重新建。
 
 ```go
-package main
-
-import (
-  "fmt"
-  "github.com/imroc/req/v3"
-  "log"
-  "time"
-)
-
-type ErrorMessage struct {
-  Message string `json:"message"`
-}
-
-type UserInfo struct {
-  Name string `json:"name"`
-  Blog string `json:"blog"`
-}
-
-func main() {
-  client := req.C().
-    SetUserAgent("my-custom-client"). // Chainable client settings.
-    SetTimeout(5 * time.Second)
-
-  var userInfo UserInfo
-  var errMsg ErrorMessage
-  resp, err := client.R().
-    SetHeader("Accept", "application/vnd.github.v3+json"). // Chainable request settings.
-    SetPathParam("username", "imroc"). // Replace path variable in url.
-    SetSuccessResult(&userInfo). // Unmarshal response body into userInfo automatically if status code is between 200 and 299.
-    SetErrorResult(&errMsg). // Unmarshal response body into errMsg automatically if status code >= 400.
-    EnableDump(). // Enable dump at request level, only print dump content if there is an error or some unknown situation occurs to help troubleshoot.
-    Get("https://api.github.com/users/{username}")
-
-  if err != nil { // Error handling.
-    log.Println("error:", err)
-    log.Println("raw content:")
-    log.Println(resp.Dump()) // Record raw content when error occurs.
-    return
-  }
-
-  if resp.IsErrorState() { // Status code >= 400.
-    fmt.Println(errMsg.Message) // Record error message returned.
-    return
-  }
-
-  if resp.IsSuccessState() { // Status code is between 200 and 299.
-    fmt.Printf("%s (%s)\n", userInfo.Name, userInfo.Blog)
-    return
-  }
-
-  // Unknown status code.
-  log.Println("unknown status", resp.Status)
-  log.Println("raw content:")
-  log.Println(resp.Dump()) // Record raw content when server returned unknown status code.
-}
-```
-
-Normally it will output (SuccessState):
-
-```txt
-roc (https://imroc.cc)
-```
-
-## <a name="More-Advanced-Get">More Advanced GET</a>
-
-You can set up a unified logic for error handling on the client, so that each time you send a request you only need to focus on the success situation, reducing duplicate code.
-
-```go
-package main
-
-import (
-	"fmt"
-	"github.com/imroc/req/v3"
-	"log"
-	"time"
-)
-
-type ErrorMessage struct {
-	Message string `json:"message"`
-}
-
-func (msg *ErrorMessage) Error() string {
-	return fmt.Sprintf("API Error: %s", msg.Message)
-}
-
-type UserInfo struct {
-	Name string `json:"name"`
-	Blog string `json:"blog"`
-}
-
 var client = req.C().
-	SetUserAgent("my-custom-client"). // Chainable client settings.
-	SetTimeout(5 * time.Second).
-	EnableDumpEachRequest().
-	SetCommonErrorResult(&ErrorMessage{}).
-	OnAfterResponse(func(client *req.Client, resp *req.Response) error {
-		if resp.Err != nil { // There is an underlying error, e.g. network error or unmarshal error.
-			return nil
-		}
-		if errMsg, ok := resp.ErrorResult().(*ErrorMessage); ok {
-			resp.Err = errMsg // Convert api error into go error
-			return nil
-		}
-		if !resp.IsSuccessState() {
-			// Neither a success response nor a error response, record details to help troubleshooting
-			resp.Err = fmt.Errorf("bad status: %s\nraw content:\n%s", resp.Status, resp.Dump())
-		}
-		return nil
-	})
-
-func main() {
-	var userInfo UserInfo
-	resp, err := client.R().
-		SetHeader("Accept", "application/vnd.github.v3+json"). // Chainable request settings
-		SetPathParam("username", "imroc").
-		SetSuccessResult(&userInfo). // Unmarshal response body into userInfo automatically if status code is between 200 and 299.
-		Get("https://api.github.com/users/{username}")
-
-	if err != nil { // Error handling.
-		log.Println("error:", err)
-		return
-	}
-
-	if resp.IsSuccessState() { // Status code is between 200 and 299.
-		fmt.Printf("%s (%s)\n", userInfo.Name, userInfo.Blog)
-	}
-}
+	SetUserAgent("my-client").
+	SetTimeout(10 * time.Second).
+	SetCommonHeader("Accept-Language", "zh-CN,zh;q=0.9").
+	EnableDumpEachRequest()
 ```
 
-## <a name="Simple-Post">Simple POST</a>
+## JSON 请求和响应
 
 ```go
-package main
-
-import (
-  "fmt"
-  "github.com/imroc/req/v3"
-  "log"
-)
-
 type Repo struct {
-  Name string `json:"name"`
-  Url  string `json:"url"`
+	Name string `json:"name"`
+	URL  string `json:"url"`
 }
 
 type Result struct {
-  Data string `json:"data"`
+	JSON Repo `json:"json"`
 }
 
-func main() {
-  client := req.C().DevMode()
-  var result Result
+var result Result
 
-  resp, err := client.R().
-    SetBody(&Repo{Name: "req", Url: "https://github.com/imroc/req"}).
-    SetSuccessResult(&result).
-    Post("https://httpbin.org/post")
-  if err != nil {
-    log.Fatal(err)
-  }
-
-  if !resp.IsSuccessState() {
-    fmt.Println("bad response status:", resp.Status)
-    return
-  }
-  fmt.Println("++++++++++++++++++++++++++++++++++++++++++++++++")
-  fmt.Println("data:", result.Data)
-  fmt.Println("++++++++++++++++++++++++++++++++++++++++++++++++")
+resp, err := req.C().R().
+	SetBody(&Repo{Name: "req", URL: "https://github.com/imroc/req"}).
+	SetSuccessResult(&result).
+	Post("https://httpbin.org/post")
+if err != nil {
+	log.Fatal(err)
+}
+if !resp.IsSuccessState() {
+	log.Fatalf("bad status: %s", resp.Status)
 }
 ```
 
-```txt
-2022/05/19 20:11:00.151171 DEBUG [req] HTTP/2 POST https://httpbin.org/post
-:authority: httpbin.org
-:method: POST
-:path: /post
-:scheme: https
-user-agent: req/v3 (https://github.com/imroc/req/v3)
-content-type: application/json; charset=utf-8
-content-length: 55
-accept-encoding: gzip
+## 错误处理
 
-{"name":"req","website":"https://github.com/imroc/req"}
-
-:status: 200
-date: Thu, 19 May 2022 12:11:00 GMT
-content-type: application/json
-content-length: 651
-server: gunicorn/19.9.0
-access-control-allow-origin: *
-access-control-allow-credentials: true
-
-{
-  "args": {},
-  "data": "{\"name\":\"req\",\"website\":\"https://github.com/imroc/req\"}",
-  "files": {},
-  "form": {},
-  "headers": {
-    "Accept-Encoding": "gzip",
-    "Content-Length": "55",
-    "Content-Type": "application/json; charset=utf-8",
-    "Host": "httpbin.org",
-    "User-Agent": "req/v3 (https://github.com/imroc/req/v3)",
-    "X-Amzn-Trace-Id": "Root=1-628633d4-7559d633152b4307288ead2e"
-  },
-  "json": {
-    "name": "req",
-    "website": "https://github.com/imroc/req"
-  },
-  "origin": "103.7.29.30",
-  "url": "https://httpbin.org/post"
-}
-
-++++++++++++++++++++++++++++++++++++++++++++++++
-data: {"name":"req","url":"https://github.com/imroc/req"}
-++++++++++++++++++++++++++++++++++++++++++++++++
-```
-
-## <a name="Do-API-Style">Do API Style</a>
-
-If you like, you can also use a Do API style like the following to make requests:
+可以把服务端错误结构自动转换成 Go error。
 
 ```go
-package main
-
-import (
-	"fmt"
-	"github.com/imroc/req/v3"
-)
-
-type APIResponse struct {
-	Origin string `json:"origin"`
-	Url    string `json:"url"`
-}
-
-func main() {
-	var resp APIResponse
-	c := req.C().SetBaseURL("https://httpbin.org/post")
-	err := c.Post().
-		SetBody("hello").
-		Do().
-		Into(&resp)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("My IP is", resp.Origin)
-}
-```
-
-```txt
-My IP is 182.138.155.113
-```
-
-* The order of chain calls is more intuitive: first call Client to create a request with a specified Method, then use chain calls to set the request, then use `Do()` to fire the request, return Response, and finally call `Response.Into` to unmarshal response body into specified object.
-* `Response.Into` will return an error if an error occurs during sending the request or during unmarshalling.
-* The url of some APIs is fixed, and different types of requests are implemented by passing different bodies. In this scenario, `Client.SetBaseURL` can be used to set a unified url, and there is no need to set the url for each request when initiating a request. Of course, you can also call `Request.SetURL` to set it if you need it.
-
-## <a name="Build-SDK-With-Req">Build SDK With Req</a>
-
-Here is an example of building GitHub's SDK with req, using two styles (`GetUserProfile_Style1`, `GetUserProfile_Style2`).
-
-```go
-import (
-	"context"
-	"fmt"
-	"github.com/imroc/req/v3"
-)
-
 type ErrorMessage struct {
 	Message string `json:"message"`
 }
 
-// Error implements go error interface.
-func (msg *ErrorMessage) Error() string {
-	return fmt.Sprintf("API Error: %s", msg.Message)
+func (e *ErrorMessage) Error() string {
+	return e.Message
 }
 
-type GithubClient struct {
-	*req.Client
-}
+client := req.C().
+	SetCommonErrorResult(&ErrorMessage{}).
+	OnAfterResponse(func(client *req.Client, resp *req.Response) error {
+		if resp.Err != nil {
+			return nil
+		}
+		if errMsg, ok := resp.ErrorResult().(*ErrorMessage); ok {
+			resp.Err = errMsg
+			return nil
+		}
+		if !resp.IsSuccessState() {
+			resp.Err = fmt.Errorf("bad status: %s\n%s", resp.Status, resp.Dump())
+		}
+		return nil
+	})
+```
 
-func NewGithubClient() *GithubClient {
-	return &GithubClient{
-		Client: req.C().
-			SetBaseURL("https://api.github.com").
-			SetCommonErrorResult(&ErrorMessage{}).
-			EnableDumpEachRequest().
-			OnAfterResponse(func(client *req.Client, resp *req.Response) error {
-				if resp.Err != nil { // There is an underlying error, e.g. network error or unmarshal error.
-					return nil
-				}
-				if errMsg, ok := resp.ErrorResult().(*ErrorMessage); ok {
-					resp.Err = errMsg // Convert api error into go error
-					return nil
-				}
-				if !resp.IsSuccessState() {
-					// Neither a success response nor a error response, record details to help troubleshooting
-					resp.Err = fmt.Errorf("bad status: %s\nraw content:\n%s", resp.Status, resp.Dump())
-				}
-				return nil
-			}),
-	}
-}
+## DevMode 和 Dump
 
-type UserProfile struct {
-	Name string `json:"name"`
-	Blog string `json:"blog"`
-}
+调试接口时直接开：
 
-// GetUserProfile_Style1 returns the user profile for the specified user.
-// Github API doc: https://docs.github.com/en/rest/users/users#get-a-user
-func (c *GithubClient) GetUserProfile_Style1(ctx context.Context, username string) (user *UserProfile, err error) {
-	_, err = c.R().
-		SetContext(ctx).
-		SetPathParam("username", username).
-		SetSuccessResult(&user).
-		Get("/users/{username}")
-	return
-}
+```go
+client := req.C().DevMode()
+resp, err := client.R().Get("https://httpbin.org/get")
+```
 
-// GetUserProfile_Style2 returns the user profile for the specified user.
-// Github API doc: https://docs.github.com/en/rest/users/users#get-a-user
-func (c *GithubClient) GetUserProfile_Style2(ctx context.Context, username string) (user *UserProfile, err error) {
-	err = c.Get("/users/{username}").
-		SetPathParam("username", username).
-		Do(ctx).
-		Into(&user)
-	return
+只在出错时 dump：
+
+```go
+resp, err := req.C().R().
+	EnableDump().
+	Get("https://api.example.com/data")
+if err != nil {
+	fmt.Println(resp.Dump())
 }
 ```
 
-## Browser Impersonation and HTTP/3
+## 浏览器伪装
 
-Chrome and Firefox impersonation profiles configure TLS fingerprints, HTTP/2 SETTINGS, method-aware header ordering, HTTP/3 SETTINGS, and HTTP/3 TLS profiles together:
+Chrome 默认使用 macOS profile，也可以指定系统。
+
+```go
+client := req.C().
+	ImpersonateChromeWithOS(req.BrowserOSWindows)
+
+resp, err := client.R().Get("https://example.com")
+```
+
+支持的系统：
+
+```go
+req.BrowserOSWindows
+req.BrowserOSMacOS
+req.BrowserOSLinux
+req.BrowserOSAndroid
+req.BrowserOSIOS
+```
+
+Firefox：
+
+```go
+client := req.C().
+	ImpersonateFirefoxWithOS(req.BrowserOSLinux)
+```
+
+Safari：
+
+```go
+client := req.C().
+	ImpersonateSafari()
+```
+
+内置 profile 会一起设置：
+
+- TLS 指纹，作用于 HTTP/1.1 和 HTTP/2。
+- HTTP/2 SETTINGS、flow、priority、pseudo header order。
+- method-aware headers：GET/POST 会使用不同的浏览器请求头。
+- HTTP/3 SETTINGS、TLS profile、QUIC profile。
+
+## JA3 和自定义 TLS 指纹
+
+JA3：
+
+```go
+ja3 := "771,4865-4866-4867-49195-49199,0-5-10-11-13-16-43-51,29-23-24,0"
+ua := "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:120.0) Gecko/20100101 Firefox/120.0"
+
+client := req.C().
+	SetTLSFingerprintJA3(ja3, ua, false)
+```
+
+自定义 uTLS spec：
+
+```go
+spec, err := utls.UTLSIdToSpec(utls.HelloChrome_Auto)
+if err != nil {
+	panic(err)
+}
+
+client := req.C().
+	SetTLSFingerprintSpec(&spec)
+```
+
+注意：`SetTLSFingerprint*`、JA3、自定义 uTLS 只作用于 HTTP/1.1 和 HTTP/2。HTTP/3 使用 quic-go 和 Go 的 `crypto/tls`，不能假装成 uTLS QUIC ClientHello。
+
+## HTTP/3 常用组合
+
+自动启用 HTTP/3，并允许 Alt-Svc 探测到的 H3 失败后回退到 H2/H1：
+
+```go
+client := req.C().
+	EnableHTTP3().
+	EnableHTTP3FallbackOnError().
+	SetHTTP3AltSvcFailureCooldown(30 * time.Second)
+```
+
+强制 HTTP/3：
+
+```go
+client := req.C().
+	EnableForceHTTP3()
+```
+
+强制 HTTP/3，同时失败回退：
+
+```go
+client := req.C().
+	EnableHTTP3FallbackOnError().
+	EnableForceHTTP3()
+```
+
+Chrome 风格 HTTP/3：
 
 ```go
 client := req.C().
 	ImpersonateChromeWithOS(req.BrowserOSWindows).
+	SetHTTP3TLSChromeProfile().
+	SetHTTP3QUICChromeProfile().
+	EnableHTTP3FallbackOnError().
 	EnableForceHTTP3()
-
-resp, err := client.R().Get("https://cloudflare-quic.com/")
 ```
 
-The built-in browser profiles apply different request headers for navigation-style requests and payload-style requests, and support `BrowserOSWindows`, `BrowserOSMacOS`, `BrowserOSLinux`, `BrowserOSAndroid`, and `BrowserOSIOS`.
-
-Advanced HTTP/3 and TLS fingerprint controls can also be composed directly:
+## HTTP/3 高级控制
 
 ```go
 client := req.C().
-	SetTLSFingerprintJA3(ja3, userAgent, false).
 	SetHTTP3TLSChromeProfile().
 	SetHTTP3QUICChromeProfile().
-	SetHTTP2InitialStreamID(3).
 	SetHTTP3AdditionalSetting(req.HTTP3SettingQpackMaxTableCapacity, 65536).
 	SetHTTP3AdditionalSetting(req.HTTP3SettingQpackBlockedStreams, 100).
 	SetHTTP3MaxResponseHeaderBytes(262144).
@@ -525,74 +260,122 @@ client := req.C().
 	EnableForceHTTP3()
 ```
 
-`SetTLSFingerprint*` and JA3 customization use uTLS for HTTP/1.1 and HTTP/2. HTTP/3 uses quic-go with Go's `crypto/tls`, so `SetHTTP3TLSChromeProfile`, `SetHTTP3TLSFirefoxProfile`, and `SetHTTP3TLSClientConfig` tune the supported HTTP/3 TLS surface honestly instead of pretending to replace QUIC ClientHello with uTLS.
+自定义 HTTP/3 TLS：
 
-`SetHTTP3QUICPerformanceProfile` and `SetHTTP3QUICChromeProfile` add practical QUIC defaults such as token reuse, keepalive, larger receive windows, and a safe initial packet size. `EnableHTTP3FallbackOnError` also covers HTTP/3 selected automatically through Alt-Svc; after a failed Alt-Svc H3 attempt, req skips that H3 endpoint for the configured cooldown and uses HTTP/2 or HTTP/1.1 instead.
+```go
+client := req.C().
+	SetHTTP3TLSClientConfig(&tls.Config{
+		MinVersion: tls.VersionTLS13,
+		MaxVersion: tls.VersionTLS13,
+		NextProtos: []string{"h3"},
+	})
+```
 
-## Thanks
+自定义 QUIC：
 
-Thanks to [enetx/surf](https://github.com/enetx/surf) (MIT) for the excellent work on modern browser profiles, HTTP/3 tuning, and TLS impersonation ideas that inspired part of req's stronger fingerprinting support.
+```go
+client := req.C().
+	SetHTTP3QUICConfig(&quic.Config{
+		HandshakeIdleTimeout: 5 * time.Second,
+		MaxIdleTimeout:       45 * time.Second,
+		KeepAlivePeriod:      15 * time.Second,
+		TokenStore:           quic.NewLRUTokenStore(256, 4),
+	})
+```
 
-## Go Version Compatibility Matrix
+使用内置性能配置：
 
-| Req Version | Go Version |
-| ----------- | ---------- |
-| 3.53.0      | 1.24+      |
-| 3.51.0      | 1.23+      |
-| 3.43.0      | 1.21+      |
-| 3.41.0      | 1.20+      |
+```go
+client := req.C().
+	SetHTTP3QUICPerformanceProfile().
+	EnableHTTP3()
+```
 
-## Contributing
+## HTTP/2 高级控制
 
-If you have a bug report or feature request, you can [open an issue](https://github.com/imroc/req/issues/new), and [pull requests](https://github.com/imroc/req/pulls) are also welcome.
+```go
+client := req.C().
+	SetHTTP2SettingsFrame(
+		http2.Setting{
+			ID:  http2.SettingHeaderTableSize,
+			Val: 65536,
+		},
+		http2.Setting{
+			ID:  http2.SettingInitialWindowSize,
+			Val: 6291456,
+		},
+	).
+	SetHTTP2ConnectionFlow(15663105).
+	SetHTTP2InitialStreamID(3)
+```
 
-## Contact
+## CookieJar Factory
 
-If you have questions, feel free to reach out to us in the following ways:
+支持标准 `http.CookieJar`：
 
-* [Github Discussion](https://github.com/imroc/req/discussions)
-* [Slack](https://imroc-req.slack.com/archives/C03UFPGSNC8) | [Join](https://slack.req.cool/)
+```go
+client := req.C().
+	SetCookieJarFactory(func() http.CookieJar {
+		jar, _ := cookiejar.New(nil)
+		return jar
+	})
+```
 
-## Sponsors
+也兼容旧写法：
 
-If you like req and it really helps you, feel free to reward me with a cup of coffee, and don't forget to mention your github id.
+```go
+client := req.C().
+	SetCookieJarFactory(func() *cookiejar.Jar {
+		jar, _ := cookiejar.New(nil)
+		return jar
+	})
+```
 
-<table>
-    <tr>
-        <td align="center">
-            <img src="https://req.cool/images/wechat.jpg" width="200px"   alt=""/>
-            <br />
-            <sub><b>Wechat</b></sub>
-        </td>
-        <td align="center">
-            <img src="https://req.cool/images/alipay.jpg" width="200px"   alt=""/>
-            <br />
-            <sub><b>Alipay</b></sub>
-        </td>
-    </tr>
-</table>
+## 文件上传
 
-Many thanks to the following sponsors:
+```go
+resp, err := req.C().R().
+	SetFile("file", "./demo.txt").
+	Post("https://httpbin.org/post")
+```
 
-<table>
-    <tr>
-        <td align="center">
-            <a href="https://github.com/M-Cosmosss">
-                <img src="https://avatars.githubusercontent.com/u/46757262?v=4?s=100" width="160px"   alt=""/>
-                <br />
-                <sub><b>M-Cosmosss 🥇</b></sub>
-            </a>
-        </td>
-        <td align="center">
-            <a href="https://github.com/aadog">
-                <img src="https://avatars.githubusercontent.com/u/18098725?v=4?s=100" width="160px"   alt=""/>
-                <br />
-                <sub><b>aadog 🥈</b></sub>
-            </a>
-        </td>
-    </tr>
-</table>
+## 文件下载
 
-## <a name="License">License</a>
+```go
+resp, err := req.C().R().
+	SetOutputFile("./out.bin").
+	Get("https://example.com/file.bin")
+```
 
-`Req` released under MIT license, refer [LICENSE](LICENSE) file.
+## 推荐自用模板
+
+```go
+func NewHTTPClient() *req.Client {
+	return req.C().
+		SetTimeout(30 * time.Second).
+		ImpersonateChromeWithOS(req.BrowserOSWindows).
+		EnableHTTP3().
+		EnableHTTP3FallbackOnError().
+		SetHTTP3AltSvcFailureCooldown(30 * time.Second).
+		SetCommonRetryCount(2).
+		EnableDumpEachRequest()
+}
+```
+
+## 测试说明
+
+本仓库在 Windows 下跑 `go test ./...` 时，目前有两个已知旧问题：
+
+- `TestTraceInfo`
+- `TestSetFile`：Windows 错误文案是 `The system cannot find the file specified.`，不是 `no such file`
+
+本次增强相关的定向测试、`internal/http2`、`internal/http3` 都已通过。
+
+## 致谢
+
+- 感谢 [imroc/req](https://github.com/imroc/req)，这个库的基础能力来自原项目。
+- 感谢 [enetx/surf](https://github.com/enetx/surf)，HTTP/3 tuning、现代浏览器 profile、TLS impersonation 等思路给了很多参考。
+
+## License
+
+MIT，见 [LICENSE](LICENSE)。
