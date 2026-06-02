@@ -18,6 +18,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"github.com/quic-go/quic-go"
 	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/publicsuffix"
 
@@ -52,7 +54,7 @@ type Client struct {
 	AllowGetMethodPayload bool
 	*Transport
 	digestAuth              *digestAuth
-	cookiejarFactory        func() *cookiejar.Jar
+	cookiejarFactory        func() http.CookieJar
 	trace                   bool
 	disableAutoReadResponse bool
 	commonErrorType         reflect.Type
@@ -75,6 +77,7 @@ type Client struct {
 	responseBodyTransformer func(rawBody []byte, req *Request, resp *Response) (transformedBody []byte, err error)
 	resultStateCheckFunc    func(resp *Response) ResultState
 	onError                 ErrorHook
+	browserProfile          *browserHeaderProfile
 }
 
 type ErrorHook func(client *Client, req *Request, resp *Response, err error)
@@ -316,9 +319,9 @@ func (c *Client) SetRootCertsFromFile(pemFiles ...string) *Client {
 // GetTLSClientConfig return the underlying tls.Config.
 func (c *Client) GetTLSClientConfig() *tls.Config {
 	if c.TLSClientConfig == nil {
-		c.TLSClientConfig = &tls.Config{
+		c.Transport.SetTLSClientConfig(&tls.Config{
 			NextProtos: []string{"h2", "http/1.1"},
-		}
+		})
 	}
 	return c.TLSClientConfig
 }
@@ -403,7 +406,7 @@ func (c *Client) DisableAutoDecompress() *Client {
 // overwriting some important configurations, such as not setting NextProtos
 // will not use http2 by default.
 func (c *Client) SetTLSClientConfig(conf *tls.Config) *Client {
-	c.TLSClientConfig = conf
+	c.Transport.SetTLSClientConfig(conf)
 	return c
 }
 
@@ -978,6 +981,12 @@ func (c *Client) SetHTTP2ConnectionFlow(flow uint32) *Client {
 	return c
 }
 
+// SetHTTP2InitialStreamID sets the first client-initiated HTTP/2 stream ID.
+func (c *Client) SetHTTP2InitialStreamID(id uint32) *Client {
+	c.Transport.SetHTTP2InitialStreamID(id)
+	return c
+}
+
 // SetHTTP2HeaderPriority set the header priority param.
 func (c *Client) SetHTTP2HeaderPriority(priority http2.PriorityParam) *Client {
 	c.Transport.SetHTTP2HeaderPriority(priority)
@@ -1225,6 +1234,10 @@ func (conn *uTLSConn) ConnectionState() tls.ConnectionState {
 // which uses the specified clientHelloID to simulate the tls fingerprint.
 // Note this is valid for HTTP1 and HTTP2, not HTTP3.
 func (c *Client) SetTLSFingerprint(clientHelloID utls.ClientHelloID) *Client {
+	return c.setTLSFingerprint(clientHelloID, nil)
+}
+
+func (c *Client) setTLSFingerprint(clientHelloID utls.ClientHelloID, uTLSConnApply func(*uTLSConn) error) *Client {
 	fn := func(ctx context.Context, addr string, plainConn net.Conn) (conn net.Conn, tlsState *tls.ConnectionState, err error) {
 		colonPos := strings.LastIndex(addr, ":")
 		if colonPos == -1 {
@@ -1248,6 +1261,11 @@ func (c *Client) SetTLSFingerprint(clientHelloID utls.ClientHelloID) *Client {
 			KeyLogWriter:                tlsConfig.KeyLogWriter,
 		}
 		uconn := &uTLSConn{utls.UClient(plainConn, utlsConfig, clientHelloID)}
+		if uTLSConnApply != nil {
+			if err = uTLSConnApply(uconn); err != nil {
+				return
+			}
+		}
 		err = uconn.HandshakeContext(ctx)
 		if err != nil {
 			return
@@ -1272,6 +1290,26 @@ func (c *Client) SetTLSFingerprint(clientHelloID utls.ClientHelloID) *Client {
 	}
 	c.Transport.SetTLSHandshake(fn)
 	return c
+}
+
+// SetTLSFingerprintSpec sets the TLS fingerprint from a custom ClientHelloSpec.
+// Note this is valid for HTTP1 and HTTP2, not HTTP3.
+func (c *Client) SetTLSFingerprintSpec(clientHelloSpec *utls.ClientHelloSpec) *Client {
+	return c.setTLSFingerprint(utls.HelloCustom, func(conn *uTLSConn) error {
+		return conn.ApplyPreset(clientHelloSpec)
+	})
+}
+
+// SetTLSFingerprintJA3 sets the TLS fingerprint from a JA3 string.
+// Note this is valid for HTTP1 and HTTP2, not HTTP3.
+func (c *Client) SetTLSFingerprintJA3(ja3, userAgent string, forceHTTP1 bool) *Client {
+	clientHelloSpec, err := cycletls.StringToSpec(ja3, userAgent, forceHTTP1)
+	return c.setTLSFingerprint(utls.HelloCustom, func(conn *uTLSConn) error {
+		if err != nil {
+			return err
+		}
+		return conn.ApplyPreset(clientHelloSpec)
+	})
 }
 
 // SetTLSHandshake set the custom tls handshake function, only valid for HTTP1 and HTTP2, not HTTP3,
@@ -1454,6 +1492,111 @@ func (c *Client) EnableHTTP3() *Client {
 	return c
 }
 
+// SetHTTP3AdditionalSettings sets additional HTTP/3 SETTINGS values.
+func (c *Client) SetHTTP3AdditionalSettings(settings map[uint64]uint64) *Client {
+	c.Transport.SetHTTP3AdditionalSettings(settings)
+	return c
+}
+
+// SetHTTP3AdditionalSetting sets one additional HTTP/3 SETTINGS value.
+func (c *Client) SetHTTP3AdditionalSetting(id, value uint64) *Client {
+	c.Transport.SetHTTP3AdditionalSetting(id, value)
+	return c
+}
+
+// SetHTTP3Grease adds a randomized HTTP/3 GREASE setting.
+func (c *Client) SetHTTP3Grease() *Client {
+	c.Transport.SetHTTP3Grease()
+	return c
+}
+
+// EnableHTTP3Datagrams enables HTTP/3 datagram support on the HTTP/3 and QUIC layers.
+func (c *Client) EnableHTTP3Datagrams() *Client {
+	c.Transport.EnableHTTP3Datagrams()
+	return c
+}
+
+// DisableHTTP3Datagrams disables HTTP/3 datagram support.
+func (c *Client) DisableHTTP3Datagrams() *Client {
+	c.Transport.DisableHTTP3Datagrams()
+	return c
+}
+
+// EnableHTTP3ExtendedConnect enables HTTP/3 Extended CONNECT (RFC 9220).
+func (c *Client) EnableHTTP3ExtendedConnect() *Client {
+	c.Transport.EnableHTTP3ExtendedConnect()
+	return c
+}
+
+// DisableHTTP3ExtendedConnect disables HTTP/3 Extended CONNECT (RFC 9220).
+func (c *Client) DisableHTTP3ExtendedConnect() *Client {
+	c.Transport.DisableHTTP3ExtendedConnect()
+	return c
+}
+
+// SetHTTP3MaxResponseHeaderBytes sets the HTTP/3 response header read limit.
+func (c *Client) SetHTTP3MaxResponseHeaderBytes(max int) *Client {
+	c.Transport.SetHTTP3MaxResponseHeaderBytes(max)
+	return c
+}
+
+// SetHTTP3QUICConfig sets the QUIC config used by HTTP/3.
+func (c *Client) SetHTTP3QUICConfig(cfg *quic.Config) *Client {
+	c.Transport.SetHTTP3QUICConfig(cfg)
+	return c
+}
+
+// SetHTTP3QUICPerformanceProfile applies a balanced QUIC config for HTTP/3.
+func (c *Client) SetHTTP3QUICPerformanceProfile() *Client {
+	c.Transport.SetHTTP3QUICPerformanceProfile()
+	return c
+}
+
+// SetHTTP3QUICChromeProfile applies Chrome-like QUIC performance defaults for HTTP/3.
+func (c *Client) SetHTTP3QUICChromeProfile() *Client {
+	c.Transport.SetHTTP3QUICChromeProfile()
+	return c
+}
+
+// SetHTTP3TLSClientConfig sets a TLS config used only by HTTP/3.
+func (c *Client) SetHTTP3TLSClientConfig(cfg *tls.Config) *Client {
+	c.Transport.SetHTTP3TLSClientConfig(cfg)
+	return c
+}
+
+// SetHTTP3TLSChromeProfile applies Chrome-like HTTP/3 TLS constraints.
+func (c *Client) SetHTTP3TLSChromeProfile() *Client {
+	c.Transport.SetHTTP3TLSChromeProfile()
+	return c
+}
+
+// SetHTTP3TLSFirefoxProfile applies Firefox-like HTTP/3 TLS constraints.
+func (c *Client) SetHTTP3TLSFirefoxProfile() *Client {
+	c.Transport.SetHTTP3TLSFirefoxProfile()
+	return c
+}
+
+// EnableHTTP3FallbackOnError allows forced HTTP/3 requests to retry with
+// HTTP/2 or HTTP/1.1 when the HTTP/3 attempt fails before the request becomes
+// unreplayable.
+func (c *Client) EnableHTTP3FallbackOnError() *Client {
+	c.Transport.EnableHTTP3FallbackOnError()
+	return c
+}
+
+// DisableHTTP3FallbackOnError disables fallback for forced HTTP/3 requests.
+func (c *Client) DisableHTTP3FallbackOnError() *Client {
+	c.Transport.DisableHTTP3FallbackOnError()
+	return c
+}
+
+// SetHTTP3AltSvcFailureCooldown sets how long a failed Alt-Svc HTTP/3 endpoint
+// is skipped after fallback.
+func (c *Client) SetHTTP3AltSvcFailureCooldown(cooldown time.Duration) *Client {
+	c.Transport.SetHTTP3AltSvcFailureCooldown(cooldown)
+	return c
+}
+
 // SetHTTP2MaxHeaderListSize set the http2 MaxHeaderListSize,
 // which is the http2 SETTINGS_MAX_HEADER_LIST_SIZE to
 // send in the initial settings frame. It is how many bytes
@@ -1554,10 +1697,11 @@ func (c *Client) Clone() *Client {
 	cc.afterResponse = cloneSlice(c.afterResponse)
 	cc.dumpOptions = c.dumpOptions.Clone()
 	cc.retryOption = c.retryOption.Clone()
+	cc.browserProfile = c.browserProfile
 	return &cc
 }
 
-func memoryCookieJarFactory() *cookiejar.Jar {
+func memoryCookieJarFactory() http.CookieJar {
 	jar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	return jar
 }
@@ -1575,6 +1719,7 @@ func C() *Client {
 		parseRequestCookie,
 		parseRequestURL,
 		parseRequestBody,
+		applyBrowserProfileHeaders,
 	}
 	afterResponse := []ResponseMiddleware{
 		parseResponseBody,
@@ -1603,9 +1748,21 @@ func C() *Client {
 // SetCookieJarFactory set the functional factory of cookie jar, which creates
 // cookie jar that store cookies for underlying `http.Client`. After client clone,
 // the cookie jar of the new client will also be regenerated using this factory
-// function.
-func (c *Client) SetCookieJarFactory(factory func() *cookiejar.Jar) *Client {
-	c.cookiejarFactory = factory
+// function. The factory can be either func() http.CookieJar or the legacy
+// func() *cookiejar.Jar.
+func (c *Client) SetCookieJarFactory(factory any) *Client {
+	switch f := factory.(type) {
+	case nil:
+		c.cookiejarFactory = nil
+	case func() http.CookieJar:
+		c.cookiejarFactory = f
+	case func() *cookiejar.Jar:
+		c.cookiejarFactory = func() http.CookieJar {
+			return f()
+		}
+	default:
+		panic("req: SetCookieJarFactory expects func() http.CookieJar or func() *cookiejar.Jar")
+	}
 	c.initCookieJar()
 	return c
 }

@@ -56,6 +56,9 @@ type ClientConn struct {
 	// If a QUICConfig is set, datagram support also needs to be enabled on the QUIC layer by setting enableDatagrams.
 	enableDatagrams bool
 
+	// Enable Extended CONNECT (RFC 9220).
+	enableExtendedConnect bool
+
 	// Additional HTTP/3 settings.
 	// It is invalid to specify any settings defined by RFC 9114 (HTTP/3) and RFC 9297 (HTTP Datagrams).
 	additionalSettings map[uint64]uint64
@@ -83,19 +86,19 @@ func newClientConn(
 	opts *transport.Options,
 	conn *quic.Conn,
 	enableDatagrams bool,
+	enableExtendedConnect bool,
 	additionalSettings map[uint64]uint64,
-	streamHijacker func(FrameType, quic.ConnectionTracingID, *quic.Stream, error) (hijacked bool, err error),
-	uniStreamHijacker func(StreamType, quic.ConnectionTracingID, *quic.ReceiveStream, error) (hijacked bool),
 	maxResponseHeaderBytes int,
 	disableCompression bool,
 	logger *slog.Logger,
 ) *ClientConn {
 	c := &ClientConn{
-		Options:            opts,
-		enableDatagrams:    enableDatagrams,
-		additionalSettings: additionalSettings,
-		disableCompression: disableCompression,
-		logger:             logger,
+		Options:               opts,
+		enableDatagrams:       enableDatagrams,
+		enableExtendedConnect: enableExtendedConnect,
+		additionalSettings:    additionalSettings,
+		disableCompression:    disableCompression,
+		logger:                logger,
 	}
 	if maxResponseHeaderBytes <= 0 {
 		c.maxResponseHeaderBytes = defaultMaxResponseHeaderBytes
@@ -122,11 +125,12 @@ func newClientConn(
 			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeInternalError), "")
 		}
 	}()
-	if streamHijacker != nil {
-		go c.handleBidirectionalStreams(streamHijacker)
-	}
-	go c.conn.handleUnidirectionalStreams(uniStreamHijacker)
 	return c
+}
+
+// handleUnidirectionalStream handles an incoming unidirectional stream.
+func (c *ClientConn) handleUnidirectionalStream(str *quic.ReceiveStream) {
+	c.conn.handleUnidirectionalStream(str)
 }
 
 // OpenRequestStream opens a new request stream on the HTTP/3 connection.
@@ -145,6 +149,7 @@ func (c *ClientConn) setupConn() error {
 	// send the SETTINGS frame
 	b = (&settingsFrame{
 		Datagram:            c.enableDatagrams,
+		ExtendedConnect:     c.enableExtendedConnect,
 		Other:               c.additionalSettings,
 		MaxFieldSectionSize: int64(c.maxResponseHeaderBytes),
 	}).Append(b)
@@ -156,6 +161,9 @@ func (c *ClientConn) setupConn() error {
 		if c.enableDatagrams {
 			sf.Datagram = pointer(true)
 		}
+		if c.enableExtendedConnect {
+			sf.ExtendedConnect = pointer(true)
+		}
 		c.conn.qlogger.RecordEvent(qlog.FrameCreated{
 			StreamID: str.StreamID(),
 			Raw:      qlog.RawInfo{Length: len(b)},
@@ -164,37 +172,6 @@ func (c *ClientConn) setupConn() error {
 	}
 	_, err = str.Write(b)
 	return err
-}
-
-func (c *ClientConn) handleBidirectionalStreams(streamHijacker func(FrameType, quic.ConnectionTracingID, *quic.Stream, error) (hijacked bool, err error)) {
-	for {
-		str, err := c.conn.conn.AcceptStream(context.Background())
-		if err != nil {
-			if c.logger != nil {
-				c.logger.Debug("accepting bidirectional stream failed", "error", err)
-			}
-			return
-		}
-		fp := &frameParser{
-			r:         str,
-			closeConn: c.conn.CloseWithError,
-			unknownFrameHandler: func(ft FrameType, e error) (processed bool, err error) {
-				id := c.conn.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID)
-				return streamHijacker(ft, id, str, e)
-			},
-		}
-		go func() {
-			if _, err := fp.ParseNext(c.conn.qlogger); err == errHijacked {
-				return
-			}
-			if err != nil {
-				if c.logger != nil {
-					c.logger.Debug("error handling stream", "error", err)
-				}
-			}
-			c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "received HTTP/3 frame on bidirectional stream")
-		}()
-	}
 }
 
 // RoundTrip executes a request and returns a response
@@ -382,7 +359,7 @@ func (c *ClientConn) doRequest(req *http.Request, str *RequestStream) (*http.Res
 				if req.ContentLength > 0 {
 					contentLength = req.ContentLength
 				}
-			  dumps := dump.GetDumpers(req.Context(), c.Dump)
+				dumps := dump.GetDumpers(req.Context(), c.Dump)
 				err := c.sendRequestBody(str, req.Body, contentLength, dumps)
 				traceWroteRequest(trace, err)
 				if err != nil {
@@ -434,4 +411,28 @@ func (c *ClientConn) doRequest(req *http.Request, str *RequestStream) (*http.Res
 // open streams on the HTTP/3 connection (e.g. WebTransport).
 func (c *ClientConn) Conn() *Conn {
 	return c.conn
+}
+
+// HandleBidirectionalStream handles an incoming bidirectional stream.
+// According to RFC 9114, the server is not allowed to open bidirectional streams,
+// so this method closes the connection with an error.
+func (c *ClientConn) HandleBidirectionalStream(str *quic.Stream) {
+	c.conn.CloseWithError(
+		quic.ApplicationErrorCode(ErrCodeStreamCreationError),
+		fmt.Sprintf("server opened bidirectional stream %d", str.StreamID()),
+	)
+}
+
+// RawClientConn is a low-level HTTP/3 client connection.
+// It allows the application to take control of the stream accept loops,
+// giving the application the ability to handle streams originating from the server.
+// This is useful for implementing WebTransport or other advanced protocols.
+type RawClientConn struct {
+	*ClientConn
+}
+
+// HandleUnidirectionalStream handles an incoming unidirectional stream.
+// This should be called for each unidirectional stream accepted from the QUIC connection.
+func (c *RawClientConn) HandleUnidirectionalStream(str *quic.ReceiveStream) {
+	c.handleUnidirectionalStream(str)
 }

@@ -19,6 +19,9 @@ import (
 
 	"github.com/imroc/req/v3/internal/header"
 	"github.com/imroc/req/v3/internal/tests"
+	"github.com/imroc/req/v3/pkg/altsvc"
+	"github.com/quic-go/quic-go"
+	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -719,4 +722,336 @@ func TestCloneCookieJar(t *testing.T) {
 	c2.SetCookieJar(nil)
 	tests.AssertEqual(t, true, c2.cookiejarFactory == nil)
 	tests.AssertEqual(t, true, c2.httpClient.Jar == nil)
+}
+
+type customCookieJar struct{}
+
+func (customCookieJar) SetCookies(*url.URL, []*http.Cookie) {}
+
+func (customCookieJar) Cookies(*url.URL) []*http.Cookie {
+	return nil
+}
+
+func TestSetCookieJarFactoryAcceptsHTTPJar(t *testing.T) {
+	jar := &customCookieJar{}
+	c := C().SetCookieJarFactory(func() http.CookieJar {
+		return jar
+	})
+	tests.AssertEqual(t, true, c.httpClient.Jar == jar)
+}
+
+func TestSetCookieJarFactoryAcceptsLegacyJar(t *testing.T) {
+	jar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+	c := C().SetCookieJarFactory(func() *cookiejar.Jar {
+		return jar
+	})
+	tests.AssertEqual(t, true, c.httpClient.Jar == jar)
+}
+
+func TestSetTLSFingerprintSpec(t *testing.T) {
+	clientHelloSpec, err := utls.UTLSIdToSpec(utls.HelloChrome_Auto)
+	tests.AssertNoError(t, err)
+
+	c := C().SetTLSFingerprintSpec(&clientHelloSpec)
+	tests.AssertEqual(t, true, c.Transport.TLSHandshakeContext != nil)
+}
+
+func TestSetTLSFingerprintJA3(t *testing.T) {
+	const ja3 = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-5-10-11-13-16-18-21-23-27-35-43-45-51-17513-65281,29-23-24,0"
+
+	c := C().SetTLSFingerprintJA3(ja3, "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:120.0) Gecko/20100101 Firefox/120.0", false)
+	tests.AssertEqual(t, true, c.Transport.TLSHandshakeContext != nil)
+}
+
+func TestHTTP3AdvancedSettings(t *testing.T) {
+	settings := map[uint64]uint64{
+		HTTP3SettingQpackMaxTableCapacity: 65536,
+	}
+
+	c := C().
+		SetHTTP3AdditionalSettings(settings).
+		SetHTTP3AdditionalSetting(HTTP3SettingQpackBlockedStreams, 100).
+		EnableHTTP3Datagrams().
+		EnableHTTP3ExtendedConnect().
+		SetHTTP3MaxResponseHeaderBytes(262144).
+		SetHTTP3QUICConfig(&quic.Config{}).
+		EnableHTTP3()
+
+	settings[HTTP3SettingQpackMaxTableCapacity] = 1
+	tests.AssertEqual(t, uint64(65536), c.Transport.http3AdditionalSettings[HTTP3SettingQpackMaxTableCapacity])
+	tests.AssertEqual(t, uint64(100), c.Transport.http3AdditionalSettings[HTTP3SettingQpackBlockedStreams])
+	tests.AssertEqual(t, true, c.Transport.http3EnableDatagrams)
+	tests.AssertEqual(t, true, c.Transport.http3EnableExtendedConnect)
+	tests.AssertEqual(t, 262144, c.Transport.http3MaxResponseHeaderBytes)
+	tests.AssertEqual(t, true, c.Transport.t3.EnableDatagrams)
+	tests.AssertEqual(t, true, c.Transport.t3.EnableExtendedConnect)
+	tests.AssertEqual(t, 262144, c.Transport.t3.MaxResponseHeaderBytes)
+	tests.AssertEqual(t, true, c.Transport.t3.QUICConfig.EnableDatagrams)
+
+	clone := c.Clone()
+	tests.AssertEqual(t, uint64(65536), clone.Transport.http3AdditionalSettings[HTTP3SettingQpackMaxTableCapacity])
+	tests.AssertEqual(t, true, clone.Transport.http3EnableDatagrams)
+	tests.AssertEqual(t, true, clone.Transport.http3EnableExtendedConnect)
+	tests.AssertEqual(t, true, clone.Transport.t3.EnableDatagrams)
+	tests.AssertEqual(t, true, clone.Transport.t3.EnableExtendedConnect)
+	clone.Transport.http3AdditionalSettings[HTTP3SettingQpackMaxTableCapacity] = 2
+	tests.AssertEqual(t, uint64(65536), c.Transport.http3AdditionalSettings[HTTP3SettingQpackMaxTableCapacity])
+}
+
+func TestHTTP3TLSConfigPropagation(t *testing.T) {
+	base := &tls.Config{
+		InsecureSkipVerify: true,
+		ServerName:         "base.example",
+		NextProtos:         []string{"h2", "http/1.1"},
+	}
+	c := C().
+		SetTLSClientConfig(base).
+		EnableHTTP3()
+
+	tests.AssertEqual(t, base, c.Transport.t3.TLSClientConfig)
+	tests.AssertEqual(t, true, c.Transport.t3.TLSClientConfig.InsecureSkipVerify)
+
+	http3Config := &tls.Config{
+		ServerName: "h3.example",
+		MinVersion: tls.VersionTLS13,
+	}
+	c.SetHTTP3TLSClientConfig(http3Config)
+	http3Config.ServerName = "mutated.example"
+
+	tests.AssertEqual(t, "h3.example", c.Transport.http3TLSClientConfig.ServerName)
+	tests.AssertEqual(t, "h3.example", c.Transport.t3.TLSClientConfig.ServerName)
+
+	c.SetHTTP3TLSClientConfig(nil)
+	tests.AssertEqual(t, base, c.Transport.t3.TLSClientConfig)
+}
+
+func TestHTTP3TLSChromeProfile(t *testing.T) {
+	c := C().
+		SetHTTP3TLSClientConfig(&tls.Config{ServerName: "h3.example"}).
+		SetHTTP3TLSChromeProfile().
+		EnableHTTP3()
+
+	cfg := c.Transport.http3TLSClientConfig
+	tests.AssertNotNil(t, cfg)
+	tests.AssertEqual(t, "h3.example", cfg.ServerName)
+	tests.AssertEqual(t, uint16(tls.VersionTLS13), cfg.MinVersion)
+	tests.AssertEqual(t, uint16(tls.VersionTLS13), cfg.MaxVersion)
+	tests.AssertEqual(t, []string{"h3"}, cfg.NextProtos)
+	tests.AssertEqual(t, true, cfg.ClientSessionCache != nil)
+	tests.AssertEqual(t, true, hasTLSCurve(cfg.CurvePreferences, tls.X25519MLKEM768))
+	tests.AssertEqual(t, true, hasTLSCurve(cfg.CurvePreferences, tls.X25519))
+	tests.AssertEqual(t, cfg, c.Transport.t3.TLSClientConfig)
+
+	clone := c.Clone()
+	tests.AssertEqual(t, "h3.example", clone.Transport.http3TLSClientConfig.ServerName)
+	clone.Transport.http3TLSClientConfig.ServerName = "clone.example"
+	tests.AssertEqual(t, "h3.example", c.Transport.http3TLSClientConfig.ServerName)
+}
+
+func TestHTTP3FallbackOnError(t *testing.T) {
+	c := tc().
+		EnableHTTP3FallbackOnError().
+		EnableForceHTTP3()
+
+	c.Transport.t3.Dial = func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
+		return nil, errors.New("h3 unavailable")
+	}
+
+	resp, err := c.R().Get("/")
+	assertSuccess(t, resp, err)
+	tests.AssertEqual(t, "GET", resp.GetHeader("Method"))
+
+	clone := c.Clone()
+	tests.AssertEqual(t, true, clone.Transport.http3FallbackOnFailure)
+	c.DisableHTTP3FallbackOnError()
+	tests.AssertEqual(t, false, c.Transport.http3FallbackOnFailure)
+}
+
+func TestHTTP3AltSvcFallbackOnError(t *testing.T) {
+	c := tc().
+		EnableHTTP3().
+		EnableHTTP3FallbackOnError().
+		SetHTTP3AltSvcFailureCooldown(time.Minute)
+
+	dialCount := 0
+	c.Transport.t3.Dial = func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
+		dialCount++
+		return nil, errors.New("h3 unavailable")
+	}
+
+	baseURL, err := url.Parse(c.BaseURL)
+	tests.AssertNoError(t, err)
+	addr := baseURL.Scheme + "://" + baseURL.Host
+	c.Transport.altSvcJar.SetAltSvc(addr, &altsvc.AltSvc{
+		Protocol: "h3",
+		Expire:   time.Now().Add(time.Hour),
+	})
+
+	resp, err := c.R().Get("/")
+	assertSuccess(t, resp, err)
+	tests.AssertEqual(t, "GET", resp.GetHeader("Method"))
+	tests.AssertEqual(t, 1, dialCount)
+	tests.AssertEqual(t, true, c.Transport.isHTTP3AltSvcCoolingDown(addr))
+
+	resp, err = c.R().Get("/")
+	assertSuccess(t, resp, err)
+	tests.AssertEqual(t, 1, dialCount)
+}
+
+func TestHTTP3QUICPerformanceProfile(t *testing.T) {
+	c := C().
+		SetHTTP3QUICPerformanceProfile().
+		EnableHTTP3Datagrams().
+		EnableHTTP3()
+
+	cfg := c.Transport.http3QUICConfig
+	tests.AssertNotNil(t, cfg)
+	tests.AssertEqual(t, 5*time.Second, cfg.HandshakeIdleTimeout)
+	tests.AssertEqual(t, 45*time.Second, cfg.MaxIdleTimeout)
+	tests.AssertEqual(t, 15*time.Second, cfg.KeepAlivePeriod)
+	tests.AssertEqual(t, uint64(512*1024), cfg.InitialStreamReceiveWindow)
+	tests.AssertEqual(t, uint64(8*1024*1024), cfg.MaxStreamReceiveWindow)
+	tests.AssertEqual(t, uint64(1024*1024), cfg.InitialConnectionReceiveWindow)
+	tests.AssertEqual(t, uint64(24*1024*1024), cfg.MaxConnectionReceiveWindow)
+	tests.AssertEqual(t, int64(-1), cfg.MaxIncomingStreams)
+	tests.AssertEqual(t, int64(100), cfg.MaxIncomingUniStreams)
+	tests.AssertEqual(t, uint16(1200), cfg.InitialPacketSize)
+	tests.AssertEqual(t, true, cfg.TokenStore != nil)
+	tests.AssertEqual(t, true, cfg.EnableDatagrams)
+	tests.AssertEqual(t, true, c.Transport.t3.QUICConfig.EnableDatagrams)
+
+	clone := c.Clone()
+	tests.AssertEqual(t, 15*time.Second, clone.Transport.http3QUICConfig.KeepAlivePeriod)
+	tests.AssertEqual(t, true, clone.Transport.t3.QUICConfig.EnableDatagrams)
+}
+
+func hasTLSCurve(curves []tls.CurveID, target tls.CurveID) bool {
+	for _, curve := range curves {
+		if curve == target {
+			return true
+		}
+	}
+	return false
+}
+
+func TestHTTP3GreaseSettingUsesQUICVarInt(t *testing.T) {
+	const maxVarInt = uint64(1<<62) - 1
+	for i := 0; i < 100; i++ {
+		id, value := http3GreaseSetting()
+		tests.AssertEqual(t, true, id >= 0x21)
+		tests.AssertEqual(t, uint64(0), (id-0x21)%0x1f)
+		tests.AssertEqual(t, true, value <= maxVarInt)
+	}
+}
+
+func TestHTTP2InitialStreamIDConfig(t *testing.T) {
+	c := C().SetHTTP2InitialStreamID(3)
+	tests.AssertEqual(t, uint32(3), c.Transport.t2.InitialStreamID)
+
+	clone := c.Clone()
+	tests.AssertEqual(t, uint32(3), clone.Transport.t2.InitialStreamID)
+}
+
+func captureProfileHeaders(t *testing.T, c *Client, method string) http.Header {
+	t.Helper()
+	var captured http.Header
+	c.WrapRoundTripFunc(func(rt RoundTripper) RoundTripFunc {
+		return func(r *Request) (*Response, error) {
+			captured = r.Headers.Clone()
+			return &Response{
+				Request: r,
+				Response: &http.Response{
+					StatusCode: http.StatusNoContent,
+					Status:     "204 No Content",
+					Header:     make(http.Header),
+					Body:       http.NoBody,
+				},
+			}, nil
+		}
+	})
+
+	resp, err := c.R().Send(method, "https://example.com/")
+	tests.AssertNoError(t, err)
+	tests.AssertNotNil(t, resp)
+	return captured
+}
+
+func TestImpersonateChromeAdvancedProfile(t *testing.T) {
+	c := C().ImpersonateChromeWithOS(BrowserOSWindows)
+	hdr := captureProfileHeaders(t, c, http.MethodGet)
+
+	tests.AssertEqual(t, "gzip, deflate, br, zstd", hdr.Get("Accept-Encoding"))
+	tests.AssertEqual(t, "en-US,en;q=0.9", hdr.Get("Accept-Language"))
+	tests.AssertEqual(t, `"Windows"`, hdr.Get("Sec-Ch-Ua-Platform"))
+	tests.AssertEqual(t, "?0", hdr.Get("Sec-Ch-Ua-Mobile"))
+	tests.AssertEqual(t, "u=0, i", hdr.Get("Priority"))
+	tests.AssertEqual(t, true, strings.Contains(hdr.Get("User-Agent"), "Windows NT 10.0"))
+	tests.AssertEqual(t, true, strings.Contains(hdr.Get("User-Agent"), "Chrome/133.0.0.0"))
+	tests.AssertEqual(t, "sec-ch-ua", hdr[HeaderOderKey][0])
+	tests.AssertEqual(t, uint64(65536), c.Transport.http3AdditionalSettings[HTTP3SettingQpackMaxTableCapacity])
+	tests.AssertEqual(t, uint64(100), c.Transport.http3AdditionalSettings[HTTP3SettingQpackBlockedStreams])
+	tests.AssertEqual(t, true, c.Transport.http3EnableDatagrams)
+	tests.AssertEqual(t, 262144, c.Transport.http3MaxResponseHeaderBytes)
+	tests.AssertNotNil(t, c.Transport.http3TLSClientConfig)
+	tests.AssertEqual(t, uint16(tls.VersionTLS13), c.Transport.http3TLSClientConfig.MinVersion)
+	tests.AssertEqual(t, true, hasTLSCurve(c.Transport.http3TLSClientConfig.CurvePreferences, tls.X25519MLKEM768))
+	tests.AssertNotNil(t, c.Transport.http3QUICConfig)
+	tests.AssertEqual(t, 15*time.Second, c.Transport.http3QUICConfig.KeepAlivePeriod)
+	tests.AssertEqual(t, true, c.Transport.http3QUICConfig.EnableDatagrams)
+}
+
+func TestImpersonateChromePostMobileProfile(t *testing.T) {
+	c := C().ImpersonateChromeWithOS(BrowserOSAndroid)
+	hdr := captureProfileHeaders(t, c, http.MethodPost)
+
+	tests.AssertEqual(t, "?1", hdr.Get("Sec-Ch-Ua-Mobile"))
+	tests.AssertEqual(t, `"Android"`, hdr.Get("Sec-Ch-Ua-Platform"))
+	tests.AssertEqual(t, true, strings.Contains(hdr.Get("User-Agent"), "Android"))
+	tests.AssertEqual(t, true, strings.Contains(hdr.Get("User-Agent"), "Mobile Safari"))
+	tests.AssertEqual(t, "*/*", hdr.Get("Accept"))
+	tests.AssertEqual(t, "u=1, i", hdr.Get("Priority"))
+	tests.AssertEqual(t, "empty", hdr.Get("Sec-Fetch-Dest"))
+	tests.AssertEqual(t, "content-length", hdr[HeaderOderKey][0])
+}
+
+func TestImpersonateFirefoxAdvancedProfile(t *testing.T) {
+	c := C().ImpersonateFirefoxWithOS(BrowserOSLinux)
+	hdr := captureProfileHeaders(t, c, http.MethodGet)
+
+	tests.AssertEqual(t, "gzip, deflate, br, zstd", hdr.Get("Accept-Encoding"))
+	tests.AssertEqual(t, "en-US,en;q=0.5", hdr.Get("Accept-Language"))
+	tests.AssertEqual(t, "u=0, i", hdr.Get("Priority"))
+	tests.AssertEqual(t, true, strings.Contains(hdr.Get("User-Agent"), "X11; Linux x86_64"))
+	tests.AssertEqual(t, "", hdr.Get("Sec-Ch-Ua"))
+	tests.AssertEqual(t, uint32(3), c.Transport.t2.InitialStreamID)
+	tests.AssertEqual(t, uint64(65536), c.Transport.http3AdditionalSettings[HTTP3SettingQpackMaxTableCapacity])
+	tests.AssertEqual(t, uint64(20), c.Transport.http3AdditionalSettings[HTTP3SettingQpackBlockedStreams])
+	tests.AssertEqual(t, uint64(1), c.Transport.http3AdditionalSettings[HTTP3SettingH3DatagramDraft])
+	tests.AssertEqual(t, true, c.Transport.http3EnableDatagrams)
+	tests.AssertEqual(t, true, c.Transport.http3EnableExtendedConnect)
+	tests.AssertNotNil(t, c.Transport.http3TLSClientConfig)
+	tests.AssertEqual(t, uint16(tls.VersionTLS13), c.Transport.http3TLSClientConfig.MinVersion)
+	tests.AssertEqual(t, true, hasTLSCurve(c.Transport.http3TLSClientConfig.CurvePreferences, tls.X25519))
+	tests.AssertNotNil(t, c.Transport.http3QUICConfig)
+	tests.AssertEqual(t, 15*time.Second, c.Transport.http3QUICConfig.KeepAlivePeriod)
+	tests.AssertEqual(t, true, c.Transport.http3QUICConfig.EnableDatagrams)
+}
+
+func TestImpersonateFirefoxHTTP3PseudoHeaderOrder(t *testing.T) {
+	c := C().ImpersonateFirefox().EnableForceHTTP3()
+	hdr := captureProfileHeaders(t, c, http.MethodGet)
+
+	tests.AssertEqual(t, ":method", hdr[PseudoHeaderOderKey][0])
+	tests.AssertEqual(t, ":scheme", hdr[PseudoHeaderOderKey][1])
+	tests.AssertEqual(t, ":authority", hdr[PseudoHeaderOderKey][2])
+	tests.AssertEqual(t, ":path", hdr[PseudoHeaderOderKey][3])
+}
+
+func TestImpersonateSwitchClearsChromeClientHints(t *testing.T) {
+	c := C().ImpersonateChrome().ImpersonateFirefox()
+	hdr := captureProfileHeaders(t, c, http.MethodGet)
+
+	tests.AssertEqual(t, "", hdr.Get("Sec-Ch-Ua"))
+	tests.AssertEqual(t, "", hdr.Get("Sec-Ch-Ua-Mobile"))
+	tests.AssertEqual(t, true, strings.Contains(hdr.Get("User-Agent"), "Firefox/120.0"))
 }

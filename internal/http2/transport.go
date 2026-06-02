@@ -141,9 +141,10 @@ type Transport struct {
 
 	Settings []http2.Setting
 
-	ConnectionFlow uint32
-	HeaderPriority http2.PriorityParam
-	PriorityFrames []http2.PriorityFrame
+	ConnectionFlow  uint32
+	InitialStreamID uint32
+	HeaderPriority  http2.PriorityParam
+	PriorityFrames  []http2.PriorityFrame
 
 	connPoolOnce  sync.Once
 	connPoolOrDef ClientConnPool // non-nil version of ConnPool
@@ -171,6 +172,20 @@ func (t *Transport) maxHeaderListSize() uint32 {
 		return 0
 	}
 	return t.MaxHeaderListSize
+}
+
+func (t *Transport) initialStreamID() uint32 {
+	id := t.InitialStreamID
+	if id == 0 || id > uint32(math.MaxInt32) {
+		return 1
+	}
+	if id%2 == 0 {
+		id++
+		if id > uint32(math.MaxInt32) {
+			return 1
+		}
+	}
+	return id
 }
 
 func (t *Transport) pingTimeout() time.Duration {
@@ -527,7 +542,7 @@ var (
 // It returns either a request to retry (either the same request, or a
 // modified clone), or an error if the request can't be replayed.
 func shouldRetryRequest(req *http.Request, err error) (*http.Request, error) {
-	if !canRetryError(err) {
+	if !CanRetryError(err) {
 		return nil, err
 	}
 	// If the Body is nil (or http.NoBody), it's safe to reuse
@@ -558,7 +573,7 @@ func shouldRetryRequest(req *http.Request, err error) (*http.Request, error) {
 	return nil, fmt.Errorf("http2: Transport: cannot retry err [%v] after Request.Body was written; define Request.GetBody to avoid this error", err)
 }
 
-func canRetryError(err error) bool {
+func CanRetryError(err error) bool {
 	if err == errClientConnUnusable || err == errClientConnGotGoAway {
 		return true
 	}
@@ -700,7 +715,7 @@ func (t *Transport) newClientConn(c net.Conn, singleUse bool) (*ClientConn, erro
 		t:                     t,
 		tconn:                 c,
 		readerDone:            make(chan struct{}),
-		nextStreamID:          1,
+		nextStreamID:          t.initialStreamID(),
 		maxFrameSize:          16 << 10,                    // spec default
 		initialWindowSize:     65535,                       // spec default
 		maxConcurrentStreams:  initialMaxConcurrentStreams, // "infinite", per spec. Use a smaller value until we have received server settings.

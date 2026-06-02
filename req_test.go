@@ -373,6 +373,16 @@ func assertIsError(t *testing.T, resp *Response, err error) {
 	}
 }
 
+func TestIntoReturnsErrorStateStatus(t *testing.T) {
+	resp := tc().Get("/status?code=500").Do()
+	tests.AssertNoError(t, resp.Err)
+
+	var body struct{}
+	err := resp.Into(&body)
+	tests.AssertNotNil(t, err)
+	tests.AssertEqual(t, "500 Internal Server Error", err.Error())
+}
+
 func TestTrailer(t *testing.T) {
 	resp, err := tc().EnableForceHTTP1().R().Get("/chunked")
 	assertSuccess(t, resp, err)

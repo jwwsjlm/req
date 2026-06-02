@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/imroc/req/v3/http2"
+	"github.com/quic-go/quic-go"
 	utls "github.com/refraction-networking/utls"
 )
 
@@ -453,6 +454,12 @@ func SetHTTP2ConnectionFlow(flow uint32) *Client {
 	return defaultClient.SetHTTP2ConnectionFlow(flow)
 }
 
+// SetHTTP2InitialStreamID is a global wrapper methods which delegated
+// to the default client's Client.SetHTTP2InitialStreamID.
+func SetHTTP2InitialStreamID(id uint32) *Client {
+	return defaultClient.SetHTTP2InitialStreamID(id)
+}
+
 // SetHTTP2HeaderPriority is a global wrapper methods which delegated
 // to the default client's Client.SetHTTP2HeaderPriority.
 func SetHTTP2HeaderPriority(priority http2.PriorityParam) *Client {
@@ -501,16 +508,28 @@ func ImpersonateChrome() *Client {
 	return defaultClient.ImpersonateChrome()
 }
 
-// ImpersonateChrome is a global wrapper methods which delegated
-// to the default client's Client.ImpersonateChrome.
+// ImpersonateChromeWithOS is a global wrapper methods which delegated
+// to the default client's Client.ImpersonateChromeWithOS.
+func ImpersonateChromeWithOS(os BrowserOS) *Client {
+	return defaultClient.ImpersonateChromeWithOS(os)
+}
+
+// ImpersonateFirefox is a global wrapper methods which delegated
+// to the default client's Client.ImpersonateFirefox.
 func ImpersonateFirefox() *Client {
 	return defaultClient.ImpersonateFirefox()
 }
 
-// ImpersonateChrome is a global wrapper methods which delegated
-// to the default client's Client.ImpersonateChrome.
+// ImpersonateFirefoxWithOS is a global wrapper methods which delegated
+// to the default client's Client.ImpersonateFirefoxWithOS.
+func ImpersonateFirefoxWithOS(os BrowserOS) *Client {
+	return defaultClient.ImpersonateFirefoxWithOS(os)
+}
+
+// ImpersonateSafari is a global wrapper methods which delegated
+// to the default client's Client.ImpersonateSafari.
 func ImpersonateSafari() *Client {
-	return defaultClient.ImpersonateFirefox()
+	return defaultClient.ImpersonateSafari()
 }
 
 // SetCommonContentType is a global wrapper methods which delegated
@@ -649,6 +668,108 @@ func EnableForceHTTP3() *Client {
 // to the default client's Client.EnableHTTP3.
 func EnableHTTP3() *Client {
 	return defaultClient.EnableHTTP3()
+}
+
+// SetHTTP3AdditionalSettings is a global wrapper methods which delegated
+// to the default client's Client.SetHTTP3AdditionalSettings.
+func SetHTTP3AdditionalSettings(settings map[uint64]uint64) *Client {
+	return defaultClient.SetHTTP3AdditionalSettings(settings)
+}
+
+// SetHTTP3AdditionalSetting is a global wrapper methods which delegated
+// to the default client's Client.SetHTTP3AdditionalSetting.
+func SetHTTP3AdditionalSetting(id, value uint64) *Client {
+	return defaultClient.SetHTTP3AdditionalSetting(id, value)
+}
+
+// SetHTTP3Grease is a global wrapper methods which delegated
+// to the default client's Client.SetHTTP3Grease.
+func SetHTTP3Grease() *Client {
+	return defaultClient.SetHTTP3Grease()
+}
+
+// EnableHTTP3Datagrams is a global wrapper methods which delegated
+// to the default client's Client.EnableHTTP3Datagrams.
+func EnableHTTP3Datagrams() *Client {
+	return defaultClient.EnableHTTP3Datagrams()
+}
+
+// DisableHTTP3Datagrams is a global wrapper methods which delegated
+// to the default client's Client.DisableHTTP3Datagrams.
+func DisableHTTP3Datagrams() *Client {
+	return defaultClient.DisableHTTP3Datagrams()
+}
+
+// EnableHTTP3ExtendedConnect is a global wrapper methods which delegated
+// to the default client's Client.EnableHTTP3ExtendedConnect.
+func EnableHTTP3ExtendedConnect() *Client {
+	return defaultClient.EnableHTTP3ExtendedConnect()
+}
+
+// DisableHTTP3ExtendedConnect is a global wrapper methods which delegated
+// to the default client's Client.DisableHTTP3ExtendedConnect.
+func DisableHTTP3ExtendedConnect() *Client {
+	return defaultClient.DisableHTTP3ExtendedConnect()
+}
+
+// SetHTTP3MaxResponseHeaderBytes is a global wrapper methods which delegated
+// to the default client's Client.SetHTTP3MaxResponseHeaderBytes.
+func SetHTTP3MaxResponseHeaderBytes(max int) *Client {
+	return defaultClient.SetHTTP3MaxResponseHeaderBytes(max)
+}
+
+// SetHTTP3QUICConfig is a global wrapper methods which delegated
+// to the default client's Client.SetHTTP3QUICConfig.
+func SetHTTP3QUICConfig(cfg *quic.Config) *Client {
+	return defaultClient.SetHTTP3QUICConfig(cfg)
+}
+
+// SetHTTP3QUICPerformanceProfile is a global wrapper methods which delegated
+// to the default client's Client.SetHTTP3QUICPerformanceProfile.
+func SetHTTP3QUICPerformanceProfile() *Client {
+	return defaultClient.SetHTTP3QUICPerformanceProfile()
+}
+
+// SetHTTP3QUICChromeProfile is a global wrapper methods which delegated
+// to the default client's Client.SetHTTP3QUICChromeProfile.
+func SetHTTP3QUICChromeProfile() *Client {
+	return defaultClient.SetHTTP3QUICChromeProfile()
+}
+
+// SetHTTP3TLSClientConfig is a global wrapper methods which delegated
+// to the default client's Client.SetHTTP3TLSClientConfig.
+func SetHTTP3TLSClientConfig(cfg *tls.Config) *Client {
+	return defaultClient.SetHTTP3TLSClientConfig(cfg)
+}
+
+// SetHTTP3TLSChromeProfile is a global wrapper methods which delegated
+// to the default client's Client.SetHTTP3TLSChromeProfile.
+func SetHTTP3TLSChromeProfile() *Client {
+	return defaultClient.SetHTTP3TLSChromeProfile()
+}
+
+// SetHTTP3TLSFirefoxProfile is a global wrapper methods which delegated
+// to the default client's Client.SetHTTP3TLSFirefoxProfile.
+func SetHTTP3TLSFirefoxProfile() *Client {
+	return defaultClient.SetHTTP3TLSFirefoxProfile()
+}
+
+// EnableHTTP3FallbackOnError is a global wrapper methods which delegated
+// to the default client's Client.EnableHTTP3FallbackOnError.
+func EnableHTTP3FallbackOnError() *Client {
+	return defaultClient.EnableHTTP3FallbackOnError()
+}
+
+// DisableHTTP3FallbackOnError is a global wrapper methods which delegated
+// to the default client's Client.DisableHTTP3FallbackOnError.
+func DisableHTTP3FallbackOnError() *Client {
+	return defaultClient.DisableHTTP3FallbackOnError()
+}
+
+// SetHTTP3AltSvcFailureCooldown is a global wrapper methods which delegated
+// to the default client's Client.SetHTTP3AltSvcFailureCooldown.
+func SetHTTP3AltSvcFailureCooldown(cooldown time.Duration) *Client {
+	return defaultClient.SetHTTP3AltSvcFailureCooldown(cooldown)
 }
 
 // DisableForceHttpVersion is a global wrapper methods which delegated

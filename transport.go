@@ -47,6 +47,7 @@ import (
 	"github.com/imroc/req/v3/internal/util"
 	"github.com/imroc/req/v3/pkg/altsvc"
 	reqtls "github.com/imroc/req/v3/pkg/tls"
+	"github.com/quic-go/quic-go"
 	htmlcharset "golang.org/x/net/html/charset"
 	"golang.org/x/text/encoding/ianaindex"
 
@@ -125,6 +126,7 @@ type Transport struct {
 	altSvcJar        altsvc.Jar
 	pendingAltSvcs   map[string]*pendingAltSvc
 	pendingAltSvcsMu sync.Mutex
+	http3AltSvcFails map[string]time.Time
 
 	// Force using specific http version
 	forceHttpVersion httpVersion
@@ -144,6 +146,15 @@ type Transport struct {
 	autoDecodeContentType func(contentType string) bool
 	wrappedRoundTrip      http.RoundTripper
 	httpRoundTripWrappers []HttpRoundTripWrapper
+
+	http3AdditionalSettings     map[uint64]uint64
+	http3EnableDatagrams        bool
+	http3EnableExtendedConnect  bool
+	http3FallbackOnFailure      bool
+	http3AltSvcFailureCooldown  time.Duration
+	http3MaxResponseHeaderBytes int
+	http3QUICConfig             *quic.Config
+	http3TLSClientConfig        *tls.Config
 }
 
 // NewTransport is an alias of T
@@ -429,6 +440,14 @@ func (t *Transport) SetHTTP2ConnectionFlow(flow uint32) *Transport {
 	return t
 }
 
+// SetHTTP2InitialStreamID sets the first client-initiated HTTP/2 stream ID.
+// Zero keeps the standard default stream ID 1. Even values are normalized to
+// the next valid client stream ID when a new HTTP/2 connection is created.
+func (t *Transport) SetHTTP2InitialStreamID(id uint32) *Transport {
+	t.t2.InitialStreamID = id
+	return t
+}
+
 // SetHTTP2HeaderPriority set the header priority param.
 func (t *Transport) SetHTTP2HeaderPriority(priority http2.PriorityParam) *Transport {
 	t.t2.HeaderPriority = priority
@@ -447,6 +466,9 @@ func (t *Transport) SetHTTP2PriorityFrames(frames ...http2.PriorityFrame) *Trans
 // If non-nil, HTTP/2 support may not be enabled by default.
 func (t *Transport) SetTLSClientConfig(cfg *tls.Config) *Transport {
 	t.TLSClientConfig = cfg
+	if t.http3TLSClientConfig == nil {
+		t.syncHTTP3TLSClientConfig()
+	}
 	return t
 }
 
@@ -562,6 +584,7 @@ func (t *Transport) DisableForceHttpVersion() *Transport {
 func (t *Transport) DisableHTTP3() {
 	t.altSvcJar = nil
 	t.pendingAltSvcs = nil
+	t.http3AltSvcFails = nil
 	t.t3 = nil
 }
 
@@ -587,9 +610,30 @@ func (t *Transport) EnableHTTP3() {
 		t.pendingAltSvcs = make(map[string]*pendingAltSvc)
 	}
 	t3 := &http3.Transport{
-		Options: &t.Options,
+		Options:                &t.Options,
+		TLSClientConfig:        t.activeHTTP3TLSClientConfig(),
+		EnableDatagrams:        t.http3EnableDatagrams,
+		EnableExtendedConnect:  t.http3EnableExtendedConnect,
+		AdditionalSettings:     cloneHTTP3Settings(t.http3AdditionalSettings),
+		MaxResponseHeaderBytes: t.http3MaxResponseHeaderBytes,
+	}
+	if t.http3QUICConfig != nil {
+		t3.QUICConfig = t.http3QUICConfig.Clone()
 	}
 	t.t3 = t3
+}
+
+func (t *Transport) activeHTTP3TLSClientConfig() *tls.Config {
+	if t.http3TLSClientConfig != nil {
+		return t.http3TLSClientConfig
+	}
+	return t.TLSClientConfig
+}
+
+func (t *Transport) syncHTTP3TLSClientConfig() {
+	if t.t3 != nil {
+		t.t3.TLSClientConfig = t.activeHTTP3TLSClientConfig()
+	}
 }
 
 type wrapResponseBodyKeyType int
@@ -612,6 +656,9 @@ var allowedProtocols = map[string]bool{
 
 func (t *Transport) handleAltSvc(req *http.Request, value string) {
 	addr := netutil.AuthorityKey(req.URL)
+	if t.isHTTP3AltSvcCoolingDown(addr) {
+		return
+	}
 	as := t.altSvcJar.GetAltSvc(addr)
 	if as != nil {
 		return
@@ -646,6 +693,7 @@ func (t *Transport) handleAltSvc(req *http.Request, value string) {
 }
 
 func (t *Transport) handlePendingAltSvc(u *url.URL, pas *pendingAltSvc) {
+	addr := netutil.AuthorityKey(u)
 	for i := pas.CurrentIndex; i < len(pas.Entries); i++ {
 		switch pas.Entries[i].Protocol {
 		case "h3": // only support h3 in alt-svc for now
@@ -659,6 +707,7 @@ func (t *Transport) handlePendingAltSvc(u *url.URL, pas *pendingAltSvc) {
 			} else {
 				pas.CurrentIndex = i
 				pas.Transport = t.t3
+				t.clearHTTP3AltSvcFailure(addr)
 				if t.Debugf != nil {
 					t.Debugf("detected that the server %s supports http3, will try to use http3 protocol in subsequent requests", hostname)
 				}
@@ -666,6 +715,7 @@ func (t *Transport) handlePendingAltSvc(u *url.URL, pas *pendingAltSvc) {
 			}
 		}
 	}
+	t.markHTTP3AltSvcFailure(addr)
 }
 
 func (t *Transport) wrapResponseBody(res *http.Response, wrap wrapResponseBodyFunc) {
@@ -747,6 +797,25 @@ func (t *Transport) Clone() *Transport {
 		autoDecodeContentType: t.autoDecodeContentType,
 		forceHttpVersion:      t.forceHttpVersion,
 		httpRoundTripWrappers: t.httpRoundTripWrappers,
+
+		http3AdditionalSettings:     cloneHTTP3Settings(t.http3AdditionalSettings),
+		http3EnableDatagrams:        t.http3EnableDatagrams,
+		http3EnableExtendedConnect:  t.http3EnableExtendedConnect,
+		http3FallbackOnFailure:      t.http3FallbackOnFailure,
+		http3AltSvcFailureCooldown:  t.http3AltSvcFailureCooldown,
+		http3MaxResponseHeaderBytes: t.http3MaxResponseHeaderBytes,
+	}
+	if t.http3QUICConfig != nil {
+		tt.http3QUICConfig = t.http3QUICConfig.Clone()
+	}
+	if t.http3TLSClientConfig != nil {
+		tt.http3TLSClientConfig = t.http3TLSClientConfig.Clone()
+	}
+	if len(t.http3AltSvcFails) > 0 {
+		tt.http3AltSvcFails = make(map[string]time.Time, len(t.http3AltSvcFails))
+		for addr, until := range t.http3AltSvcFails {
+			tt.http3AltSvcFails[addr] = until
+		}
 	}
 	if len(tt.httpRoundTripWrappers) > 0 { // clone transport middleware
 		fn := func(req *http.Request) (*http.Response, error) {
@@ -766,6 +835,7 @@ func (t *Transport) Clone() *Transport {
 			PingTimeout:                t.t2.PingTimeout,
 			WriteByteTimeout:           t.t2.WriteByteTimeout,
 			ConnectionFlow:             t.t2.ConnectionFlow,
+			InitialStreamID:            t.t2.InitialStreamID,
 			Settings:                   cloneSlice(t.t2.Settings),
 			HeaderPriority:             t.t2.HeaderPriority,
 			PriorityFrames:             cloneSlice(t.t2.PriorityFrames),
@@ -826,14 +896,26 @@ func (tr *transportRequest) setError(err error) {
 	tr.mu.Unlock()
 }
 
-func (t *Transport) roundTripAltSvc(req *http.Request, as *altsvc.AltSvc) (resp *http.Response, err error) {
+func (t *Transport) roundTripAltSvc(req *http.Request, addr string, as *altsvc.AltSvc) (resp *http.Response, usedAltSvc bool, err error) {
+	return t.roundTripAltSvcWithRoundTripper(req, addr, as, nil)
+}
+
+func (t *Transport) roundTripAltSvcWithRoundTripper(req *http.Request, addr string, as *altsvc.AltSvc, rt http.RoundTripper) (resp *http.Response, usedAltSvc bool, err error) {
 	r := req.Clone(req.Context())
 	r.URL = altsvcutil.ConvertURL(as, req.URL)
 	switch as.Protocol {
 	case "h3":
-		resp, err = t.t3.RoundTrip(r)
+		if rt == nil {
+			rt = t.t3
+		}
+		return t.roundTripHTTP3AltSvc(req, r, addr, rt)
 	case "h2":
-		resp, err = t.t2.RoundTrip(r)
+		if rt != nil {
+			resp, err = rt.RoundTrip(r)
+		} else {
+			resp, err = t.t2.RoundTrip(r)
+		}
+		usedAltSvc = err == nil
 	default:
 		// impossible!
 		panic(fmt.Sprintf("unknown protocol %q", as.Protocol))
@@ -841,11 +923,101 @@ func (t *Transport) roundTripAltSvc(req *http.Request, as *altsvc.AltSvc) (resp 
 	return
 }
 
+func (t *Transport) roundTripHTTP3AltSvc(req, altReq *http.Request, addr string, rt http.RoundTripper) (resp *http.Response, usedAltSvc bool, err error) {
+	if rt == nil {
+		return nil, false, errors.New("http: HTTP/3 transport is not enabled")
+	}
+	if !t.http3FallbackOnFailure {
+		resp, err = rt.RoundTrip(altReq)
+		if err == nil {
+			t.clearHTTP3AltSvcFailure(addr)
+			usedAltSvc = true
+		}
+		return
+	}
+
+	altReq = setupRewindBody(altReq)
+	resp, err = rt.RoundTrip(altReq)
+	if err == nil {
+		t.clearHTTP3AltSvcFailure(addr)
+		return resp, true, nil
+	}
+	t.markHTTP3AltSvcFailure(addr)
+	if !shouldFallbackHTTP3Error(altReq, altReq.URL.Scheme, err) {
+		return nil, false, err
+	}
+
+	fallbackReq, rewindErr := rewindBody(altReq)
+	if rewindErr != nil {
+		return nil, false, err
+	}
+	fallbackReq.URL = req.URL
+	resp, err = t.roundTripWithoutHTTP3(fallbackReq)
+	return resp, false, err
+}
+
+func (t *Transport) http3AltSvcFailureCooldownDuration() time.Duration {
+	if t.http3AltSvcFailureCooldown < 0 {
+		return 0
+	}
+	if t.http3AltSvcFailureCooldown == 0 {
+		return defaultHTTP3AltSvcFailureCooldown
+	}
+	return t.http3AltSvcFailureCooldown
+}
+
+func (t *Transport) isHTTP3AltSvcCoolingDown(addr string) bool {
+	cooldown := t.http3AltSvcFailureCooldownDuration()
+	if cooldown <= 0 || addr == "" {
+		return false
+	}
+
+	now := time.Now()
+	t.pendingAltSvcsMu.Lock()
+	defer t.pendingAltSvcsMu.Unlock()
+	until, ok := t.http3AltSvcFails[addr]
+	if !ok {
+		return false
+	}
+	if until.After(now) {
+		return true
+	}
+	delete(t.http3AltSvcFails, addr)
+	return false
+}
+
+func (t *Transport) markHTTP3AltSvcFailure(addr string) {
+	cooldown := t.http3AltSvcFailureCooldownDuration()
+	if cooldown <= 0 || addr == "" {
+		return
+	}
+
+	t.pendingAltSvcsMu.Lock()
+	defer t.pendingAltSvcsMu.Unlock()
+	if t.http3AltSvcFails == nil {
+		t.http3AltSvcFails = make(map[string]time.Time)
+	}
+	t.http3AltSvcFails[addr] = time.Now().Add(cooldown)
+	delete(t.pendingAltSvcs, addr)
+}
+
+func (t *Transport) clearHTTP3AltSvcFailure(addr string) {
+	if addr == "" {
+		return
+	}
+	t.pendingAltSvcsMu.Lock()
+	defer t.pendingAltSvcsMu.Unlock()
+	delete(t.http3AltSvcFails, addr)
+}
+
 func (t *Transport) checkAltSvc(req *http.Request) (resp *http.Response, err error) {
 	if t.altSvcJar == nil {
 		return
 	}
 	addr := netutil.AuthorityKey(req.URL)
+	if t.isHTTP3AltSvcCoolingDown(addr) {
+		return
+	}
 	t.pendingAltSvcsMu.Lock()
 	pas, ok := t.pendingAltSvcs[addr]
 	t.pendingAltSvcsMu.Unlock()
@@ -853,27 +1025,29 @@ func (t *Transport) checkAltSvc(req *http.Request) (resp *http.Response, err err
 		pas.Mu.Lock()
 		if pas.Transport != nil {
 			pas.LastTime = time.Now()
-			r := req.Clone(req.Context())
-			r.URL = altsvcutil.ConvertURL(pas.Entries[pas.CurrentIndex], req.URL)
-			resp, err = pas.Transport.RoundTrip(r)
+			var usedAltSvc bool
+			resp, usedAltSvc, err = t.roundTripAltSvcWithRoundTripper(req, addr, pas.Entries[pas.CurrentIndex], pas.Transport)
 			if err != nil {
 				pas.Transport = nil
 				if pas.CurrentIndex+1 < len(pas.Entries) {
 					pas.CurrentIndex++
 					go t.handlePendingAltSvc(req.URL, pas)
 				}
-			} else {
+			} else if usedAltSvc {
 				t.altSvcJar.SetAltSvc(addr, pas.Entries[pas.CurrentIndex])
 				t.pendingAltSvcsMu.Lock()
 				delete(t.pendingAltSvcs, addr)
 				t.pendingAltSvcsMu.Unlock()
+			} else {
+				pas.Transport = nil
 			}
 		}
 		pas.Mu.Unlock()
 		return
 	}
 	if as := t.altSvcJar.GetAltSvc(addr); as != nil {
-		return t.roundTripAltSvc(req, as)
+		resp, _, err = t.roundTripAltSvc(req, addr, as)
+		return
 	}
 	return
 }
@@ -892,6 +1066,47 @@ func validateHeaders(hdrs http.Header) string {
 		}
 	}
 	return ""
+}
+
+func (t *Transport) roundTripForceHTTP3(req *http.Request, scheme string) (*http.Response, error) {
+	if t.t3 == nil {
+		closeBody(req)
+		return nil, errors.New("http: HTTP/3 transport is not enabled")
+	}
+	if !t.http3FallbackOnFailure {
+		return t.t3.RoundTrip(req)
+	}
+
+	req = setupRewindBody(req)
+	resp, err := t.t3.RoundTrip(req)
+	if err == nil {
+		return resp, nil
+	}
+	if !shouldFallbackHTTP3Error(req, scheme, err) {
+		return nil, err
+	}
+
+	fallbackReq, rewindErr := rewindBody(req)
+	if rewindErr != nil {
+		return nil, err
+	}
+	return t.roundTripWithoutHTTP3(fallbackReq)
+}
+
+func shouldFallbackHTTP3Error(req *http.Request, scheme string, err error) bool {
+	return scheme == "https" &&
+		context.Cause(req.Context()) == nil &&
+		!errors.Is(err, context.Canceled) &&
+		!errors.Is(err, context.DeadlineExceeded)
+}
+
+func (t *Transport) roundTripWithoutHTTP3(req *http.Request) (*http.Response, error) {
+	tt := t.Clone()
+	tt.forceHttpVersion = ""
+	tt.altSvcJar = nil
+	tt.pendingAltSvcs = nil
+	tt.t3 = nil
+	return tt.roundTrip(req)
 }
 
 // roundTrip implements a http.RoundTripper over HTTP.
@@ -933,7 +1148,7 @@ func (t *Transport) roundTrip(req *http.Request) (resp *http.Response, err error
 	if t.forceHttpVersion != "" {
 		switch t.forceHttpVersion {
 		case h3:
-			return t.t3.RoundTrip(req)
+			return t.roundTripForceHTTP3(req, scheme)
 		case h2:
 			return t.t2.RoundTrip(req)
 		}
@@ -944,7 +1159,7 @@ func (t *Transport) roundTrip(req *http.Request) (resp *http.Response, err error
 
 	if scheme == "https" && t.forceHttpVersion != h1 {
 		resp, err := t.t2.RoundTripOnlyCachedConn(req)
-		if err != h2internal.ErrNoCachedConn {
+		if err != h2internal.ErrNoCachedConn && !h2internal.CanRetryError(err) {
 			return resp, err
 		}
 		req, err = rewindBody(req)

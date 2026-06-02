@@ -24,8 +24,9 @@ Full documentation is available on the official website: https://req.cool.
 * **Easy API Testing**: API testing can be done with minimal code, no need to explicitly create any Request or Client, or even to handle errors (See [Quick HTTP Test](https://req.cool/docs/tutorial/quick-test/))
 * **Smart by Default**: Detect and decode to utf-8 automatically if possible to avoid garbled characters (See [Auto Decode](https://req.cool/docs/tutorial/auto-decode/)), marshal request body and unmarshal response body automatically according to the Content-Type.
 * **Support Multiple HTTP Versions**: Support `HTTP/1.1`, `HTTP/2`, and `HTTP/3`, and can automatically detect the server side and select the optimal HTTP version for requests, you can also force the protocol if you want (See [Force HTTP version](https://req.cool/docs/tutorial/force-http-version/)).
+* **Advanced HTTP/3 Controls**: Tune HTTP/3 SETTINGS, QUIC datagrams, Extended CONNECT, response header limits, GREASE values, HTTP/3 TLS profiles, and optional H3-to-H2/H1 fallback for demanding interoperability and impersonation scenarios.
 * **Support Retry**: Support automatic request retry and is fully customizable (See [Retry](https://req.cool/docs/tutorial/retry/)).
-* **HTTP Fingerprinting**: Support http fingerprint impersonation, so that we can access websites that prohibit crawler programs by identifying http fingerprints (See [HTTP Fingerprint](https://req.cool/docs/tutorial/http-fingerprint/)).
+* **HTTP Fingerprinting**: Support browser impersonation, TLS fingerprints, JA3, ordered HTTP/2 settings, and header ordering, so that we can access websites that prohibit crawler programs by identifying http fingerprints (See [HTTP Fingerprint](https://req.cool/docs/tutorial/http-fingerprint/)).
 * **Multiple Authentication Methods**: You can use HTTP Basic Auth, Bearer Auth Token and Digest Auth out of box (see [Authentication](https://req.cool/docs/tutorial/authentication/)).
 * **Easy Download and Upload**: You can download and upload files with simple request settings, and even set a callback to show real-time progress (See [Download](https://req.cool/docs/tutorial/download/) and [Upload](https://req.cool/docs/tutorial/upload/)).
 * **Exportable**: `req.Transport` is exportable. Compared with `http.Transport`, it also supports HTTP3, dump content, middleware, etc. It can directly replace the Transport of `http.Client` in existing projects, and obtain more powerful functions with minimal code change.
@@ -490,6 +491,47 @@ func (c *GithubClient) GetUserProfile_Style2(ctx context.Context, username strin
 	return
 }
 ```
+
+## Browser Impersonation and HTTP/3
+
+Chrome and Firefox impersonation profiles configure TLS fingerprints, HTTP/2 SETTINGS, method-aware header ordering, HTTP/3 SETTINGS, and HTTP/3 TLS profiles together:
+
+```go
+client := req.C().
+	ImpersonateChromeWithOS(req.BrowserOSWindows).
+	EnableForceHTTP3()
+
+resp, err := client.R().Get("https://cloudflare-quic.com/")
+```
+
+The built-in browser profiles apply different request headers for navigation-style requests and payload-style requests, and support `BrowserOSWindows`, `BrowserOSMacOS`, `BrowserOSLinux`, `BrowserOSAndroid`, and `BrowserOSIOS`.
+
+Advanced HTTP/3 and TLS fingerprint controls can also be composed directly:
+
+```go
+client := req.C().
+	SetTLSFingerprintJA3(ja3, userAgent, false).
+	SetHTTP3TLSChromeProfile().
+	SetHTTP3QUICChromeProfile().
+	SetHTTP2InitialStreamID(3).
+	SetHTTP3AdditionalSetting(req.HTTP3SettingQpackMaxTableCapacity, 65536).
+	SetHTTP3AdditionalSetting(req.HTTP3SettingQpackBlockedStreams, 100).
+	SetHTTP3MaxResponseHeaderBytes(262144).
+	EnableHTTP3Datagrams().
+	EnableHTTP3ExtendedConnect().
+	SetHTTP3Grease().
+	EnableHTTP3FallbackOnError().
+	SetHTTP3AltSvcFailureCooldown(30 * time.Second).
+	EnableForceHTTP3()
+```
+
+`SetTLSFingerprint*` and JA3 customization use uTLS for HTTP/1.1 and HTTP/2. HTTP/3 uses quic-go with Go's `crypto/tls`, so `SetHTTP3TLSChromeProfile`, `SetHTTP3TLSFirefoxProfile`, and `SetHTTP3TLSClientConfig` tune the supported HTTP/3 TLS surface honestly instead of pretending to replace QUIC ClientHello with uTLS.
+
+`SetHTTP3QUICPerformanceProfile` and `SetHTTP3QUICChromeProfile` add practical QUIC defaults such as token reuse, keepalive, larger receive windows, and a safe initial packet size. `EnableHTTP3FallbackOnError` also covers HTTP/3 selected automatically through Alt-Svc; after a failed Alt-Svc H3 attempt, req skips that H3 endpoint for the configured cooldown and uses HTTP/2 or HTTP/1.1 instead.
+
+## Thanks
+
+Thanks to [enetx/surf](https://github.com/enetx/surf) (MIT) for the excellent work on modern browser profiles, HTTP/3 tuning, and TLS impersonation ideas that inspired part of req's stronger fingerprinting support.
 
 ## Go Version Compatibility Matrix
 
