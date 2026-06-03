@@ -222,6 +222,11 @@ func (c *Client) ImpersonateChromeWithOS(os BrowserOS) *Client {
 	return c
 }
 
+// ImpersonateChromeRandomOS impersonates Chrome with a random OS profile.
+func (c *Client) ImpersonateChromeRandomOS() *Client {
+	return c.ImpersonateChromeWithOS(BrowserOSRandom)
+}
+
 var (
 	firefoxHttp2Settings = []http2.Setting{
 		{
@@ -388,6 +393,11 @@ func (c *Client) ImpersonateFirefoxWithOS(os BrowserOS) *Client {
 		EnableHTTP3ExtendedConnect().
 		SetMultipartBoundaryFunc(firefoxMultipartBoundaryFunc)
 	return c
+}
+
+// ImpersonateFirefoxRandomOS impersonates Firefox with a random OS profile.
+func (c *Client) ImpersonateFirefoxRandomOS() *Client {
+	return c.ImpersonateFirefoxWithOS(BrowserOSRandom)
 }
 
 var (

@@ -80,6 +80,9 @@ type Transport struct {
 	// and will be reused for subsequent connections to other servers.
 	Dial func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error)
 
+	// Resolver optionally resolves hostnames before QUIC dialing.
+	Resolver *net.Resolver
+
 	// Enable support for HTTP/3 datagrams (RFC 9297).
 	// If a QUICConfig is set, datagram support also needs to be enabled on the QUIC layer by setting EnableDatagrams.
 	EnableDatagrams bool
@@ -438,7 +441,10 @@ func (t *Transport) resolveUDPAddr(ctx context.Context, network, addr string) (*
 	if err != nil {
 		return nil, err
 	}
-	resolver := net.DefaultResolver
+	resolver := t.Resolver
+	if resolver == nil {
+		resolver = net.DefaultResolver
+	}
 	ipAddrs, err := resolver.LookupIPAddr(ctx, host)
 	if err != nil {
 		return nil, err

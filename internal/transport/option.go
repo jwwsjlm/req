@@ -43,6 +43,10 @@ type Options struct {
 	// becomes idle before the later DialContext completes.
 	DialContext func(ctx context.Context, network, addr string) (net.Conn, error)
 
+	// Resolver optionally resolves hostnames for transports that don't use
+	// DialContext directly, such as HTTP/3 over QUIC.
+	Resolver *net.Resolver
+
 	// DialTLSContext specifies an optional dial function for creating
 	// TLS connections for non-proxied HTTPS requests.
 	//

@@ -1,6 +1,10 @@
 package req
 
-import "net/http"
+import (
+	"crypto/rand"
+	"math/big"
+	"net/http"
+)
 
 // BrowserOS identifies the operating system used by a browser impersonation profile.
 type BrowserOS string
@@ -11,7 +15,16 @@ const (
 	BrowserOSLinux   BrowserOS = "linux"
 	BrowserOSAndroid BrowserOS = "android"
 	BrowserOSIOS     BrowserOS = "ios"
+	BrowserOSRandom  BrowserOS = "random"
 )
+
+var browserOSValues = []BrowserOS{
+	BrowserOSWindows,
+	BrowserOSMacOS,
+	BrowserOSLinux,
+	BrowserOSAndroid,
+	BrowserOSIOS,
+}
 
 type browserHeaderProfile struct {
 	baseHeaders         map[string]string
@@ -58,9 +71,20 @@ func normalizeBrowserOS(os BrowserOS) BrowserOS {
 	switch os {
 	case BrowserOSWindows, BrowserOSMacOS, BrowserOSLinux, BrowserOSAndroid, BrowserOSIOS:
 		return os
+	case BrowserOSRandom:
+		return RandomBrowserOS()
 	default:
 		return BrowserOSMacOS
 	}
+}
+
+// RandomBrowserOS returns a random browser OS profile.
+func RandomBrowserOS() BrowserOS {
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(len(browserOSValues))))
+	if err != nil {
+		return BrowserOSMacOS
+	}
+	return browserOSValues[n.Int64()]
 }
 
 func browserOSIsMobile(os BrowserOS) bool {

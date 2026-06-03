@@ -29,7 +29,7 @@ LocalAddr         : %v`
 
 // Blame return the human-readable reason of why request is slowing.
 func (t TraceInfo) Blame() string {
-	if t.RemoteAddr == nil {
+	if t.TotalTime == 0 && t.RemoteAddr == nil {
 		return "trace is not enabled"
 	}
 	var mk string
@@ -55,7 +55,7 @@ func (t TraceInfo) Blame() string {
 
 // String return the details of trace information.
 func (t TraceInfo) String() string {
-	if t.RemoteAddr == nil {
+	if t.TotalTime == 0 && t.RemoteAddr == nil {
 		return "trace is not enabled"
 	}
 	if t.IsConnReused {

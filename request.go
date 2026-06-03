@@ -101,19 +101,23 @@ func (r *Request) TraceInfo() TraceInfo {
 
 	if !ct.tlsHandshakeStart.IsZero() {
 		if !ct.tlsHandshakeDone.IsZero() {
-			ti.TLSHandshakeTime = ct.tlsHandshakeDone.Sub(ct.tlsHandshakeStart)
+			ti.TLSHandshakeTime = traceDuration(ct.tlsHandshakeDone, ct.tlsHandshakeStart)
 		} else {
-			ti.TLSHandshakeTime = endTime.Sub(ct.tlsHandshakeStart)
+			ti.TLSHandshakeTime = traceDuration(endTime, ct.tlsHandshakeStart)
 		}
 	}
 
+	traceStart := ct.getConn
+	if traceStart.IsZero() {
+		traceStart = r.StartTime
+	}
 	if ct.gotConnInfo.Reused {
-		ti.TotalTime = endTime.Sub(ct.getConn)
+		ti.TotalTime = traceDuration(endTime, traceStart)
 	} else {
 		if ct.dnsStart.IsZero() {
-			ti.TotalTime = endTime.Sub(r.StartTime)
+			ti.TotalTime = traceDuration(endTime, r.StartTime)
 		} else {
-			ti.TotalTime = endTime.Sub(ct.dnsStart)
+			ti.TotalTime = traceDuration(endTime, ct.dnsStart)
 		}
 	}
 
@@ -123,23 +127,27 @@ func (r *Request) TraceInfo() TraceInfo {
 	}
 
 	if !ct.dnsStart.IsZero() {
-		ti.DNSLookupTime = dnsDone.Sub(ct.dnsStart)
+		ti.DNSLookupTime = traceDuration(dnsDone, ct.dnsStart)
 	}
 
 	// Only calculate on successful connections
 	if !ct.connectDone.IsZero() {
-		ti.TCPConnectTime = ct.connectDone.Sub(dnsDone)
+		ti.TCPConnectTime = traceDuration(ct.connectDone, dnsDone)
 	}
 
 	// Only calculate on successful connections
 	if !ct.gotConn.IsZero() {
-		ti.ConnectTime = ct.gotConn.Sub(ct.getConn)
+		ti.ConnectTime = traceDuration(ct.gotConn, traceStart)
 	}
 
 	// Only calculate on successful connections
 	if !ct.gotFirstResponseByte.IsZero() {
-		ti.FirstResponseTime = ct.gotFirstResponseByte.Sub(ct.gotConn)
-		ti.ResponseTime = endTime.Sub(ct.gotFirstResponseByte)
+		firstResponseStart := ct.gotConn
+		if firstResponseStart.IsZero() {
+			firstResponseStart = traceStart
+		}
+		ti.FirstResponseTime = traceDuration(ct.gotFirstResponseByte, firstResponseStart)
+		ti.ResponseTime = traceDuration(endTime, ct.gotFirstResponseByte)
 	}
 
 	// Capture remote address info when connection is non-nil
@@ -149,6 +157,13 @@ func (r *Request) TraceInfo() TraceInfo {
 	}
 
 	return ti
+}
+
+func traceDuration(end, start time.Time) time.Duration {
+	if start.IsZero() || end.IsZero() || end.Before(start) {
+		return 0
+	}
+	return end.Sub(start)
 }
 
 // HeaderToString get all header as string.

@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"regexp"
@@ -748,6 +749,65 @@ func TestSetCookieJarFactoryAcceptsLegacyJar(t *testing.T) {
 	tests.AssertEqual(t, true, c.httpClient.Jar == jar)
 }
 
+func TestSetDNSResolver(t *testing.T) {
+	resolver := &net.Resolver{PreferGo: true}
+	c := C().SetDNSResolver(resolver)
+	tests.AssertEqual(t, true, c.Transport.Resolver == resolver)
+
+	c.EnableHTTP3()
+	tests.AssertEqual(t, true, c.Transport.t3.Resolver == resolver)
+
+	clone := c.Clone()
+	tests.AssertEqual(t, true, clone.Transport.Resolver == resolver)
+	tests.AssertEqual(t, true, clone.Transport.t3.Resolver == resolver)
+}
+
+func TestSetDNSResolverAfterHTTP3Enabled(t *testing.T) {
+	c := C().EnableHTTP3()
+	resolver := &net.Resolver{PreferGo: true}
+	c.SetDNSResolver(resolver)
+	tests.AssertEqual(t, true, c.Transport.t3.Resolver == resolver)
+}
+
+func TestNewDNSOverTLSResolver(t *testing.T) {
+	resolver := NewDNSOverTLSResolver(DNSOverTLSCloudflare)
+	tests.AssertNotNil(t, resolver)
+	tests.AssertEqual(t, true, resolver.PreferGo)
+	tests.AssertEqual(t, true, resolver.Dial != nil)
+}
+
+func TestDNSOverTLSConvenienceMethods(t *testing.T) {
+	tests.AssertNotNil(t, C().SetDNSOverTLSCloudflare().Transport.Resolver)
+	tests.AssertNotNil(t, C().SetDNSOverTLSGoogle().Transport.Resolver)
+	tests.AssertNotNil(t, C().SetDNSOverTLSQuad9().Transport.Resolver)
+	tests.AssertNotNil(t, C().SetDNSOverTLSAdGuard().Transport.Resolver)
+	tests.AssertNotNil(t, C().SetDNSOverTLSAli().Transport.Resolver)
+}
+
+func TestResponseTLSInfo(t *testing.T) {
+	resp, err := tc().R().Get("/")
+	assertSuccess(t, resp, err)
+
+	info := resp.TLSInfo()
+	tests.AssertNotNil(t, info)
+	tests.AssertEqual(t, true, info.Version != "")
+	tests.AssertEqual(t, 64, len(info.FingerprintSHA256))
+	tests.AssertEqual(t, true, strings.Contains(info.FingerprintSHA256OpenSSL, ":"))
+	tests.AssertEqual(t, info.FingerprintSHA256, resp.TLSGrabber().FingerprintSHA256)
+}
+
+func TestResponseTLSInfoHTTPNil(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	resp, err := C().R().Get(server.URL)
+	assertSuccess(t, resp, err)
+	tests.AssertIsNil(t, resp.TLSInfo())
+	tests.AssertIsNil(t, resp.TLSGrabber())
+}
+
 func TestSetTLSFingerprintSpec(t *testing.T) {
 	clientHelloSpec, err := utls.UTLSIdToSpec(utls.HelloChrome_Auto)
 	tests.AssertNoError(t, err)
@@ -1012,6 +1072,23 @@ func TestImpersonateChromePostMobileProfile(t *testing.T) {
 	tests.AssertEqual(t, "u=1, i", hdr.Get("Priority"))
 	tests.AssertEqual(t, "empty", hdr.Get("Sec-Fetch-Dest"))
 	tests.AssertEqual(t, "content-length", hdr[HeaderOderKey][0])
+}
+
+func TestImpersonateChromeRandomOS(t *testing.T) {
+	c := C().ImpersonateChromeRandomOS()
+	hdr := captureProfileHeaders(t, c, http.MethodGet)
+	tests.AssertEqual(t, true, strings.Contains(hdr.Get("User-Agent"), "133.0.0.0"))
+	tests.AssertEqual(t, true, hdr.Get("Sec-Ch-Ua-Platform") != "")
+}
+
+func TestRandomBrowserOS(t *testing.T) {
+	for i := 0; i < 20; i++ {
+		switch RandomBrowserOS() {
+		case BrowserOSWindows, BrowserOSMacOS, BrowserOSLinux, BrowserOSAndroid, BrowserOSIOS:
+		default:
+			t.Fatal("unexpected browser OS")
+		}
+	}
 }
 
 func TestImpersonateFirefoxAdvancedProfile(t *testing.T) {

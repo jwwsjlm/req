@@ -612,6 +612,7 @@ func (t *Transport) EnableHTTP3() {
 	t3 := &http3.Transport{
 		Options:                &t.Options,
 		TLSClientConfig:        t.activeHTTP3TLSClientConfig(),
+		Resolver:               t.Resolver,
 		EnableDatagrams:        t.http3EnableDatagrams,
 		EnableExtendedConnect:  t.http3EnableExtendedConnect,
 		AdditionalSettings:     cloneHTTP3Settings(t.http3AdditionalSettings),
@@ -1790,6 +1791,9 @@ func (t *Transport) dial(ctx context.Context, network, addr string) (net.Conn, e
 			err = errors.New("net/http: Transport.DialContext hook returned (nil, nil)")
 		}
 		return c, err
+	}
+	if t.Resolver != nil {
+		return (&net.Dialer{Resolver: t.Resolver}).DialContext(ctx, network, addr)
 	}
 	return zeroDialer.DialContext(ctx, network, addr)
 }
