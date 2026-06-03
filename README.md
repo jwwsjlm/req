@@ -21,25 +21,55 @@
 - 请求构造补强：Any 类型参数、多值 Header、Raw Path 参数、带 Content-Type 的 multipart field、显式 Content-Length。
 - 保留 req 原有的 debug、dump、retry、download、upload、middleware、自动 JSON/XML 等能力。
 
+## 相比原版的增强点
+
+原版 [imroc/req](https://github.com/imroc/req) 已经提供了成熟的链式 HTTP client、HTTP/2/HTTP/3、调试、重试、上传下载、Cookie、middleware 等基础能力。这个 fork 不是重写一套新库，而是在原版基础上继续补强我自己常用的场景：
+
+- **浏览器伪装更完整**：内置 Chrome、Firefox、Safari profile，并区分 Windows、macOS、Linux、Android、iOS；`ImpersonateChromeWithOS` 这类方法会同时配置 User-Agent、常见浏览器请求头、TLS 指纹、HTTP/2 顺序和部分 HTTP/3 profile，而不是只改一个 Header。
+- **TLS/HTTP 指纹可调得更细**：支持 JA3、自定义 uTLS `ClientHelloSpec`、Chrome TLS profile、HTTP/2 SETTINGS/header order/pseudo header order/priority/initial stream id，方便用 `tls.peet.ws/api/all` 这类服务验证实际指纹。
+- **HTTP/3 控制更偏实战**：补了 HTTP/3 SETTINGS、GREASE、Datagram、Extended CONNECT、QUICConfig、QUIC 性能 profile、Alt-Svc 失败冷却和失败回退；普通抓取建议 `EnableHTTP3().EnableHTTP3FallbackOnError()`，不要一上来强制 H3。
+- **DNS 和 TLS 信息更方便**：支持自定义 resolver、DNS-over-TLS provider，并能从响应读取 TLS 版本、证书信息和 SHA-256 指纹，排查网络和证书问题更省事。
+- **请求构造更适合日常业务**：增加 Any 类型参数、多值 Header、raw path 参数、`SetQueryParamsFromStruct`、带 Content-Type 的 multipart field、显式 `Content-Length`、自定义 CookieJar factory 等补充方法。
+- **资源释放和高并发更稳**：对 dump、trace、retry、multipart 上传、parallel download 做了并发和资源释放加固，重点处理 response body、文件句柄、临时目录、goroutine/channel 退出这些长期运行时容易踩的坑。
+- **中文新手文档更完整**：README 和 [示例.md](示例.md) 都使用 `github.com/jwwsjlm/req/v3`，并覆盖从 `go mod init` 到完整业务 client 封装的用法。
+
 ## 方法速查
 
 | 场景 | 常用方法 |
 | --- | --- |
-| 创建请求 | `C()`、`R()`、`Get()`、`Post()`、`Put()`、`Patch()`、`Delete()` |
-| URL 参数 | `SetBaseURL`、`SetScheme`、`SetQueryParamAny`、`SetQueryParamsFromStruct`、`SetQueryString`、`SetPathRawParam` |
-| Header/Cookie | `SetHeaderAny`、`SetHeaderValues`、`SetHeaders`、`SetCookies`、`SetCookieJarFactory` |
-| Body | `SetBody`、`SetContentLength`、`SetBodyJsonMarshal`、`SetBodyXmlMarshal`、`SetFormData`、`SetOrderedFormData` |
-| 结果解析 | `SetSuccessResult`、`SetErrorResult`、`Into`、`UnmarshalJson`、`UnmarshalXml`、`ToString`、`ToBytes` |
-| 错误处理 | `SetCommonErrorResult`、`SetResultStateCheckFunc`、`OnError`、`OnAfterResponse` |
-| 重试 | `SetCommonRetryCount`、`SetCommonRetryBackoffInterval`、`SetRetryCount`、`SetRetryCondition` |
-| 调试 | `DevMode`、`EnableDump`、`EnableDumpEachRequest`、`EnableTraceAll`、`EnableTrace`、`TraceInfo` |
-| 浏览器伪装 | `ImpersonateChromeWithOS`、`ImpersonateChromeRandomOS`、`ImpersonateFirefoxWithOS`、`ImpersonateSafari` |
-| TLS 指纹 | `SetTLSFingerprintJA3`、`SetTLSFingerprintSpec`、`SetTLSFingerprintChrome` |
-| DNS | `SetDNSResolver`、`SetDNSOverTLSCloudflare`、`SetDNSOverTLS` |
-| HTTP/2 | `EnableForceHTTP2`、`SetHTTP2SettingsFrame`、`SetHTTP2InitialStreamID` |
-| HTTP/3 | `EnableHTTP3`、`EnableForceHTTP3`、`EnableHTTP3FallbackOnError`、`SetHTTP3QUICPerformanceProfile` |
-| 上传下载 | `SetFile`、`SetFiles`、`SetFileBytes`、`SetMultipartField`、`SetOutputFile`、`SetOutputDirectory`、`NewParallelDownload` |
-| 扩展集成 | `GetClient`、`GetTransport`、`Do`、`WrapRoundTripFunc`、`SetResponseBodyTransformer` |
+| 创建 client/request | `C()`、`NewClient()`、`DefaultClient()`、`SetDefaultClient()`、`NewTransport()`、`T()`、`R()`、`NewRequest()`、`Clone()` |
+| HTTP 方法 | `Get()`、`Post()`、`Put()`、`Patch()`、`Delete()`、`Head()`、`Options()`、`Send()`、`Do()`、`MustGet()`、`MustPost()`、`MustPut()`、`MustPatch()`、`MustDelete()`、`MustOptions()`、`MustHead()`、`EnableAllowGetMethodPayload`、`DisableAllowGetMethodPayload` |
+| BaseURL/路径 | `SetBaseURL`、`SetScheme`、`SetURL`、`SetPathParam`、`SetPathParamAny`、`SetPathParams`、`SetPathRawParam`、`SetPathRawParamAny`、`SetPathRawParams` |
+| Query 参数 | `SetQueryParam`、`SetQueryParamAny`、`AddQueryParam`、`AddQueryParams`、`SetQueryParams`、`SetQueryParamsAnyType`、`SetQueryParamsFromValues`、`SetQueryParamsFromStruct`、`SetQueryString` |
+| Header | `SetHeader`、`SetHeaderAny`、`SetHeaderValues`、`SetHeaderMultiValues`、`SetHeaders`、`SetHeaderNonCanonical`、`SetHeadersNonCanonical`、`SetHeaderOrder`、`SetPseudoHeaderOrder` |
+| 公共 Header | `SetUserAgent`、`SetCommonHeader`、`SetCommonHeaderAny`、`SetCommonHeaderValues`、`SetCommonHeaderMultiValues`、`SetCommonHeaders`、`SetCommonHeaderNonCanonical`、`SetCommonHeadersNonCanonical`、`SetCommonHeaderOrder`、`SetCommonPseudoHeaderOder`、`SetCommonContentType` |
+| 公共 Query/路径 | `SetCommonQueryParam`、`SetCommonQueryParamAny`、`SetCommonQueryParams`、`AddCommonQueryParam`、`AddCommonQueryParams`、`SetCommonQueryParamsFromValues`、`SetCommonQueryParamsFromStruct`、`SetCommonQueryString`、`SetCommonPathParam`、`SetCommonPathParamAny`、`SetCommonPathParams`、`SetCommonPathRawParam`、`SetCommonPathRawParamAny`、`SetCommonPathRawParams` |
+| Cookie | `SetCookies`、`SetCommonCookies`、`SetCookieJarFactory`、`SetCookieJar`、`GetCookies`、`ClearCookies` |
+| 认证 | `SetAuthToken`、`SetBearerAuthToken`、`SetAuthSchemeToken`、`SetBasicAuth`、`SetDigestAuth`、`SetCommonAuthToken`、`SetCommonBearerAuthToken`、`SetCommonAuthSchemeToken`、`SetCommonBasicAuth`、`SetCommonDigestAuth` |
+| Body/Content-Type | `SetBody`、`SetBodyBytes`、`SetBodyString`、`SetBodyJsonString`、`SetBodyJsonBytes`、`SetBodyJsonMarshal`、`SetBodyXmlString`、`SetBodyXmlBytes`、`SetBodyXmlMarshal`、`SetContentType`、`SetContentLength` |
+| 表单/multipart | `SetFormData`、`SetFormDataAny`、`SetFormDataAnyType`、`SetFormDataFromValues`、`SetOrderedFormData`、`SetCommonFormData`、`SetCommonFormDataAny`、`SetCommonFormDataAnyType`、`SetCommonFormDataFromValues`、`SetMultipartBoundaryFunc`、`SetMultipartField`、`SetFileUpload`、`EnableForceMultipart`、`DisableForceMultipart` |
+| 上传 | `SetFile`、`SetFiles`、`SetFileBytes`、`SetFileReader`、`SetUploadCallback`、`SetUploadCallbackWithInterval`、`EnableForceChunkedEncoding`、`DisableForceChunkedEncoding` |
+| 下载 | `SetOutputFile`、`SetOutput`、`SetOutputDirectory`、`SetDownloadCallback`、`SetDownloadCallbackWithInterval`、`NewParallelDownload`、`SetConcurrency`、`SetSegmentSize`、`SetTempRootDir`、`SetFileMode` |
+| 结果解析 | `SetSuccessResult`、`SetErrorResult`、`SetResult`、`SetError`、`SuccessResult`、`ErrorResult`、`Result`、`Error`、`Into`、`Unmarshal`、`UnmarshalJson`、`UnmarshalXml`、`ToString`、`ToBytes` |
+| Response 读取 | `String`、`Bytes`、`Dump`、`GetStatus`、`GetStatusCode`、`GetContentType`、`GetHeader`、`GetHeaderValues`、`HeaderToString`、`IsSuccess`、`IsError`、`TLSInfo`、`TLSGrabber`、`TotalTime`、`ReceivedAt` |
+| 错误处理 | `SetCommonErrorResult`、`SetCommonError`、`SetResultStateCheckFunc`、`OnError`、`OnBeforeRequest`、`OnAfterResponse`、`IsSuccessState`、`IsErrorState`、`ResultState` |
+| 超时/context | `SetTimeout`、`SetContext`、`Context`、`SetContextData`、`GetContextData`、`SetClient`、`DisableAutoReadResponse`、`EnableAutoReadResponse`、`EnableCloseConnection` |
+| 重试 | `SetCommonRetryCount`、`SetCommonRetryInterval`、`SetCommonRetryFixedInterval`、`SetCommonRetryBackoffInterval`、`SetCommonRetryCondition`、`AddCommonRetryCondition`、`SetCommonRetryHook`、`AddCommonRetryHook`、`SetRetryCount`、`SetRetryInterval`、`SetRetryFixedInterval`、`SetRetryBackoffInterval`、`SetRetryCondition`、`AddRetryCondition`、`SetRetryHook`、`AddRetryHook` |
+| 调试 dump | `DevMode`、`SetDebug`、`EnableDebugLog`、`DisableDebugLog`、`EnableDumpAll`、`EnableDumpAllTo`、`EnableDumpAllToFile`、`EnableDumpAllAsync`、`EnableDumpEachRequest`、`EnableDumpEachRequestWithoutBody`、`EnableDump`、`EnableDumpTo`、`EnableDumpToFile`、`DisableDump`、`DisableDumpAll` |
+| Dump 细节 | `SetCommonDumpOptions`、`SetDumpOptions`、`EnableDumpAllWithoutBody`、`EnableDumpAllWithoutHeader`、`EnableDumpAllWithoutRequest`、`EnableDumpAllWithoutRequestBody`、`EnableDumpAllWithoutResponse`、`EnableDumpAllWithoutResponseBody`、`EnableDumpEachRequestWithoutHeader`、`EnableDumpEachRequestWithoutRequest`、`EnableDumpEachRequestWithoutRequestBody`、`EnableDumpEachRequestWithoutResponse`、`EnableDumpEachRequestWithoutResponseBody`、`EnableDumpWithoutBody`、`EnableDumpWithoutHeader`、`EnableDumpWithoutRequest`、`EnableDumpWithoutRequestBody`、`EnableDumpWithoutResponse`、`EnableDumpWithoutResponseBody` |
+| Trace | `EnableTraceAll`、`DisableTraceAll`、`EnableTrace`、`DisableTrace`、`TraceInfo`、`Blame` |
+| 浏览器伪装 | `ImpersonateChrome`、`ImpersonateChromeWithOS`、`ImpersonateChromeRandomOS`、`ImpersonateFirefox`、`ImpersonateFirefoxWithOS`、`ImpersonateFirefoxRandomOS`、`ImpersonateSafari`、`RandomBrowserOS` |
+| TLS 指纹 | `SetTLSFingerprint`、`SetTLSFingerprintJA3`、`SetTLSFingerprintSpec`、`SetTLSFingerprintChrome`、`SetTLSFingerprintFirefox`、`SetTLSFingerprintSafari`、`SetTLSFingerprintEdge`、`SetTLSFingerprintQQ`、`SetTLSFingerprint360`、`SetTLSFingerprintIOS`、`SetTLSFingerprintAndroid`、`SetTLSFingerprintRandomized` |
+| TLS/证书 | `SetTLSClientConfig`、`GetTLSClientConfig`、`SetRootCertFromString`、`SetRootCertsFromFile`、`SetCertFromFile`、`SetCerts`、`EnableInsecureSkipVerify`、`DisableInsecureSkipVerify` |
+| DNS | `NewDNSOverTLSResolver`、`SetDNSResolver`、`SetDNSOverTLS`、`SetDNSOverTLSCloudflare`、`SetDNSOverTLSGoogle`、`SetDNSOverTLSQuad9`、`SetDNSOverTLSAdGuard`、`SetDNSOverTLSAli` |
+| 代理/dial | `SetProxyURL`、`SetProxy`、`SetProxyConnectHeader`、`SetGetProxyConnectHeader`、`SetUnixSocket`、`SetDial`、`SetDialTLS`、`SetTLSHandshake`、`SetTLSHandshakeTimeout` |
+| 重定向 | `SetRedirectPolicy`、`MaxRedirectPolicy`、`DefaultRedirectPolicy`、`NoRedirectPolicy`、`SameDomainRedirectPolicy`、`SameHostRedirectPolicy`、`AllowedHostRedirectPolicy`、`AllowedDomainRedirectPolicy`、`AlwaysCopyHeaderRedirectPolicy` |
+| 压缩/解码 | `EnableAutoDecompress`、`DisableAutoDecompress`、`EnableCompression`、`DisableCompression`、`EnableAutoDecode`、`DisableAutoDecode`、`SetAutoDecodeContentType`、`SetAutoDecodeAllContentType`、`SetAutoDecodeContentTypeFunc`、`SetResponseBodyTransformer` |
+| HTTP 版本 | `EnableForceHTTP1`、`EnableForceHTTP2`、`EnableForceHTTP3`、`DisableForceHttpVersion`、`EnableH2C`、`DisableH2C`、`EnableHTTP3`、`DisableHTTP3`、`EnableHTTP3FallbackOnError` |
+| HTTP/2 细节 | `SetHTTP2SettingsFrame`、`SetHTTP2ConnectionFlow`、`SetHTTP2InitialStreamID`、`SetHTTP2HeaderPriority`、`SetHTTP2PriorityFrames`、`SetHTTP2MaxHeaderListSize`、`SetHTTP2ReadIdleTimeout`、`SetHTTP2PingTimeout`、`SetHTTP2WriteByteTimeout`、`SetHTTP2StrictMaxConcurrentStreams` |
+| HTTP/3 细节 | `SetHTTP3AdditionalSettings`、`SetHTTP3AdditionalSetting`、`SetHTTP3Grease`、`EnableHTTP3Datagrams`、`DisableHTTP3Datagrams`、`EnableHTTP3ExtendedConnect`、`DisableHTTP3ExtendedConnect`、`SetHTTP3MaxResponseHeaderBytes`、`SetHTTP3QUICConfig`、`SetHTTP3QUICPerformanceProfile`、`SetHTTP3QUICChromeProfile`、`SetHTTP3TLSClientConfig`、`SetHTTP3TLSChromeProfile`、`SetHTTP3TLSFirefoxProfile`、`EnableHTTP3FallbackOnError`、`DisableHTTP3FallbackOnError`、`SetHTTP3AltSvcFailureCooldown` |
+| Transport/性能 | `GetTransport`、`SetMaxIdleConns`、`GetMaxIdleConns`、`SetMaxConnsPerHost`、`SetIdleConnTimeout`、`SetResponseHeaderTimeout`、`SetMaxResponseHeaderBytes`、`SetExpectContinueTimeout`、`SetReadBufferSize`、`SetWriteBufferSize`、`DisableKeepAlives`、`EnableKeepAlives`、`CloseIdleConnections`、`CancelRequest` |
+| 扩展集成 | `GetClient`、`Do(*http.Request)`、`RoundTrip`、`WrapRoundTripFunc`、`WrapRoundTrip`、`NewLogger`、`NewLoggerFromStandardLogger`、`GetLogger`、`SetLogger`、`SetJsonMarshal`、`SetJsonUnmarshal`、`SetXmlMarshal`、`SetXmlUnmarshal` |
 
 ## 安装
 
@@ -336,7 +366,7 @@ type Result struct {
 var result Result
 
 resp, err := req.C().R().
-	SetBody(&Repo{Name: "req", URL: "https://github.com/jwwsjlm/req"}).
+	SetBodyJsonMarshal(&Repo{Name: "req", URL: "https://github.com/jwwsjlm/req"}).
 	SetSuccessResult(&result).
 	Post("https://httpbin.org/post")
 if err != nil {
