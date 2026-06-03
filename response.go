@@ -147,7 +147,9 @@ func (r *Response) ReceivedAt() time.Time {
 func (r *Response) setReceivedAt() {
 	r.receivedAt = time.Now()
 	if r.Request.trace != nil {
-		r.Request.trace.endTime = r.receivedAt
+		r.Request.trace.update(func() {
+			r.Request.trace.endTime = r.receivedAt
+		})
 	}
 }
 

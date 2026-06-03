@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"sync"
 )
 
 // Options controls the dump behavior.
@@ -119,7 +120,13 @@ func (ds Dumpers) DumpResponseHeader(p []byte) {
 // Dumper is the dump tool.
 type Dumper struct {
 	Options
-	ch chan *dumpTask
+	ch        chan *dumpTask
+	stopCh    chan struct{}
+	startCh   chan struct{}
+	doneCh    chan struct{}
+	writeMu   sync.Mutex
+	startOnce sync.Once
+	stopOnce  sync.Once
 }
 
 type dumpTask struct {
@@ -132,6 +139,9 @@ func NewDumper(opt Options) *Dumper {
 	d := &Dumper{
 		Options: opt,
 		ch:      make(chan *dumpTask, 20),
+		stopCh:  make(chan struct{}),
+		startCh: make(chan struct{}),
+		doneCh:  make(chan struct{}),
 	}
 	return d
 }
@@ -147,6 +157,9 @@ func (d *Dumper) Clone() *Dumper {
 	return &Dumper{
 		Options: d.Options.Clone(),
 		ch:      make(chan *dumpTask, 20),
+		stopCh:  make(chan struct{}),
+		startCh: make(chan struct{}),
+		doneCh:  make(chan struct{}),
 	}
 }
 
@@ -157,10 +170,15 @@ func (d *Dumper) DumpTo(p []byte, output io.Writer) {
 	if d.Async() {
 		b := make([]byte, len(p))
 		copy(b, p)
-		d.ch <- &dumpTask{Data: b, Output: output}
+		select {
+		case d.ch <- &dumpTask{Data: b, Output: output}:
+		case <-d.stopCh:
+		}
 		return
 	}
-	output.Write(p)
+	d.writeMu.Lock()
+	_, _ = output.Write(p)
+	d.writeMu.Unlock()
 }
 
 func (d *Dumper) DumpDefault(p []byte) {
@@ -184,16 +202,64 @@ func (d *Dumper) DumpResponseBody(p []byte) {
 }
 
 func (d *Dumper) Stop() {
-	d.ch <- nil
+	d.stopOnce.Do(func() {
+		close(d.stopCh)
+	})
+	select {
+	case <-d.startCh:
+		<-d.doneCh
+	default:
+	}
 }
 
 func (d *Dumper) Start() {
-	for t := range d.ch {
-		if t == nil {
+	d.start(false)
+}
+
+func (d *Dumper) StartAsync() {
+	d.start(true)
+}
+
+func (d *Dumper) start(async bool) {
+	d.startOnce.Do(func() {
+		close(d.startCh)
+		run := func() {
+			defer close(d.doneCh)
+			d.run()
+		}
+		if async {
+			go run()
 			return
 		}
-		t.Output.Write(t.Data)
+		run()
+	})
+}
+
+func (d *Dumper) run() {
+	for {
+		select {
+		case t := <-d.ch:
+			d.write(t)
+		case <-d.stopCh:
+			for {
+				select {
+				case t := <-d.ch:
+					d.write(t)
+				default:
+					return
+				}
+			}
+		}
 	}
+}
+
+func (d *Dumper) write(t *dumpTask) {
+	if t == nil || t.Output == nil || len(t.Data) == 0 {
+		return
+	}
+	d.writeMu.Lock()
+	_, _ = t.Output.Write(t.Data)
+	d.writeMu.Unlock()
 }
 
 type dumperKeyType int

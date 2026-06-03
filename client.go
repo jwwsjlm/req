@@ -70,6 +70,7 @@ type Client struct {
 	scheme                  string
 	log                     Logger
 	dumpOptions             *DumpOptions
+	dumpOutputCloser        io.Closer
 	httpClient              *http.Client
 	beforeRequest           []RequestMiddleware
 	udBeforeRequest         []RequestMiddleware
@@ -668,12 +669,18 @@ func (c *Client) EnableDumpAll() *Client {
 // EnableDumpAllToFile enable dump for requests fired from the
 // client and output to the specified file.
 func (c *Client) EnableDumpAllToFile(filename string) *Client {
+	if c.Dump != nil {
+		c.DisableDump()
+	} else {
+		c.closeDumpOutput()
+	}
 	file, err := os.Create(filename)
 	if err != nil {
 		c.log.Errorf("create dump file error: %v", err)
 		return c
 	}
 	c.getDumpOptions().Output = file
+	c.dumpOutputCloser = file
 	c.EnableDumpAll()
 	return c
 }
@@ -681,6 +688,7 @@ func (c *Client) EnableDumpAllToFile(filename string) *Client {
 // EnableDumpAllTo enable dump for requests fired from the
 // client and output to the specified io.Writer.
 func (c *Client) EnableDumpAllTo(output io.Writer) *Client {
+	c.closeDumpOutput()
 	c.getDumpOptions().Output = output
 	c.EnableDumpAll()
 	return c
@@ -1099,11 +1107,33 @@ func (c *Client) DisableDumpAll() *Client {
 	return c
 }
 
+// DisableDump disables dump for requests fired from the client.
+func (c *Client) DisableDump() {
+	c.Transport.DisableDump()
+	c.closeDumpOutput()
+}
+
+func (c *Client) closeDumpOutput() {
+	if c.dumpOutputCloser == nil {
+		return
+	}
+	if err := c.dumpOutputCloser.Close(); err != nil {
+		c.log.Warnf("close dump output error: %v", err)
+	}
+	c.dumpOutputCloser = nil
+	if c.dumpOptions != nil {
+		c.dumpOptions.Output = nil
+	}
+}
+
 // SetCommonDumpOptions configures the underlying Transport's DumpOptions
 // for requests fired from the client.
 func (c *Client) SetCommonDumpOptions(opt *DumpOptions) *Client {
 	if opt == nil {
 		return c
+	}
+	if opt.Output != nil {
+		c.closeDumpOutput()
 	}
 	if opt.Output == nil {
 		if c.dumpOptions != nil {
@@ -1784,6 +1814,7 @@ func (c *Client) Clone() *Client {
 	cc.udBeforeRequest = cloneSlice(c.udBeforeRequest)
 	cc.afterResponse = cloneSlice(c.afterResponse)
 	cc.dumpOptions = c.dumpOptions.Clone()
+	cc.dumpOutputCloser = nil
 	cc.retryOption = c.retryOption.Clone()
 	cc.browserProfile = c.browserProfile
 	return &cc

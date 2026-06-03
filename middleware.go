@@ -123,29 +123,40 @@ func writeMultipartFormFile(w *multipart.Writer, file *FileUpload, r *Request) e
 	return err
 }
 
-func writeMultiPart(r *Request, w *multipart.Writer) {
-	defer w.Close() // close multipart to write tailer boundary
+func writeMultiPart(r *Request, w *multipart.Writer) (err error) {
+	defer func() {
+		if closeErr := w.Close(); err == nil {
+			err = closeErr
+		}
+	}()
 	if len(r.FormData) > 0 {
 		for k, vs := range r.FormData {
 			for _, v := range vs {
-				w.WriteField(k, v)
+				if err = w.WriteField(k, v); err != nil {
+					return err
+				}
 			}
 		}
 	} else if len(r.OrderedFormData) > 0 {
 		if len(r.OrderedFormData)%2 != 0 {
 			r.error = errBadOrderedFormData
-			return
+			return errBadOrderedFormData
 		}
 		maxIndex := len(r.OrderedFormData) - 2
 		for i := 0; i <= maxIndex; i += 2 {
 			key := r.OrderedFormData[i]
 			value := r.OrderedFormData[i+1]
-			w.WriteField(key, value)
+			if err = w.WriteField(key, value); err != nil {
+				return err
+			}
 		}
 	}
 	for _, file := range r.uploadFiles {
-		writeMultipartFormFile(w, file, r)
+		if err = writeMultipartFormFile(w, file, r); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func handleMultiPart(c *Client, r *Request) (err error) {
@@ -165,7 +176,10 @@ func handleMultiPart(c *Client, r *Request) (err error) {
 		}
 		r.SetContentType(w.FormDataContentType())
 		go func() {
-			writeMultiPart(r, w)
+			if err := writeMultiPart(r, w); err != nil {
+				pw.CloseWithError(err)
+				return
+			}
 			pw.Close() // close pipe writer so that pipe reader could get EOF, and stop upload
 		}()
 	} else {
@@ -174,7 +188,9 @@ func handleMultiPart(c *Client, r *Request) (err error) {
 		if len(b) > 0 {
 			w.SetBoundary(b)
 		}
-		writeMultiPart(r, w)
+		if err = writeMultiPart(r, w); err != nil {
+			return err
+		}
 		r.GetBody = func() (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewReader(buf.Bytes())), nil
 		}

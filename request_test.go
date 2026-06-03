@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -1065,6 +1066,21 @@ func TestSetFile(t *testing.T) {
 	tests.AssertEqual(t, getTestFileContent(t, filename), resp.Bytes())
 
 	_, err := tc().SetLogger(nil).R().SetFile("file", "file-not-exists.txt").Post("/file-text")
+	tests.AssertNotNil(t, err)
+	errMsg := err.Error()
+	tests.AssertEqual(t, true, strings.Contains(errMsg, "no such file") || strings.Contains(errMsg, "cannot find the file"))
+}
+
+func TestSetFileReturnsErrorWhenFileMissingAtSend(t *testing.T) {
+	filename := filepath.Join(t.TempDir(), "upload.txt")
+	err := os.WriteFile(filename, []byte("upload body"), 0600)
+	tests.AssertNoError(t, err)
+
+	r := tc().R().SetFile("file", filename)
+	err = os.Remove(filename)
+	tests.AssertNoError(t, err)
+
+	_, err = r.Post("/file-text")
 	tests.AssertNotNil(t, err)
 	errMsg := err.Error()
 	tests.AssertEqual(t, true, strings.Contains(errMsg, "no such file") || strings.Contains(errMsg, "cannot find the file"))

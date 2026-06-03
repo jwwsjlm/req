@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http/httptrace"
+	"sync"
 	"time"
 )
 
@@ -110,6 +111,7 @@ type TraceInfo struct {
 }
 
 type clientTrace struct {
+	mu                   sync.Mutex
 	getConn              time.Time
 	dnsStart             time.Time
 	dnsDone              time.Time
@@ -122,42 +124,97 @@ type clientTrace struct {
 	gotConnInfo          httptrace.GotConnInfo
 }
 
+type clientTraceSnapshot struct {
+	getConn              time.Time
+	dnsStart             time.Time
+	dnsDone              time.Time
+	connectDone          time.Time
+	tlsHandshakeStart    time.Time
+	tlsHandshakeDone     time.Time
+	gotConn              time.Time
+	gotFirstResponseByte time.Time
+	endTime              time.Time
+	gotConnInfo          httptrace.GotConnInfo
+}
+
+func (t *clientTrace) update(fn func()) {
+	t.mu.Lock()
+	fn()
+	t.mu.Unlock()
+}
+
+func (t *clientTrace) snapshot() clientTraceSnapshot {
+	t.mu.Lock()
+	s := clientTraceSnapshot{
+		getConn:              t.getConn,
+		dnsStart:             t.dnsStart,
+		dnsDone:              t.dnsDone,
+		connectDone:          t.connectDone,
+		tlsHandshakeStart:    t.tlsHandshakeStart,
+		tlsHandshakeDone:     t.tlsHandshakeDone,
+		gotConn:              t.gotConn,
+		gotFirstResponseByte: t.gotFirstResponseByte,
+		endTime:              t.endTime,
+		gotConnInfo:          t.gotConnInfo,
+	}
+	t.mu.Unlock()
+	return s
+}
+
 func (t *clientTrace) createContext(ctx context.Context) context.Context {
 	return httptrace.WithClientTrace(
 		ctx,
 		&httptrace.ClientTrace{
 			DNSStart: func(_ httptrace.DNSStartInfo) {
-				t.dnsStart = time.Now()
+				t.update(func() {
+					t.dnsStart = time.Now()
+				})
 			},
 			DNSDone: func(_ httptrace.DNSDoneInfo) {
-				t.dnsDone = time.Now()
+				t.update(func() {
+					t.dnsDone = time.Now()
+				})
 			},
 			ConnectStart: func(_, _ string) {
-				if t.dnsDone.IsZero() {
-					t.dnsDone = time.Now()
-				}
-				if t.dnsStart.IsZero() {
-					t.dnsStart = t.dnsDone
-				}
+				t.update(func() {
+					if t.dnsDone.IsZero() {
+						t.dnsDone = time.Now()
+					}
+					if t.dnsStart.IsZero() {
+						t.dnsStart = t.dnsDone
+					}
+				})
 			},
 			ConnectDone: func(net, addr string, err error) {
-				t.connectDone = time.Now()
+				t.update(func() {
+					t.connectDone = time.Now()
+				})
 			},
 			GetConn: func(_ string) {
-				t.getConn = time.Now()
+				t.update(func() {
+					t.getConn = time.Now()
+				})
 			},
 			GotConn: func(ci httptrace.GotConnInfo) {
-				t.gotConn = time.Now()
-				t.gotConnInfo = ci
+				t.update(func() {
+					t.gotConn = time.Now()
+					t.gotConnInfo = ci
+				})
 			},
 			GotFirstResponseByte: func() {
-				t.gotFirstResponseByte = time.Now()
+				t.update(func() {
+					t.gotFirstResponseByte = time.Now()
+				})
 			},
 			TLSHandshakeStart: func() {
-				t.tlsHandshakeStart = time.Now()
+				t.update(func() {
+					t.tlsHandshakeStart = time.Now()
+				})
 			},
 			TLSHandshakeDone: func(_ tls.ConnectionState, _ error) {
-				t.tlsHandshakeDone = time.Now()
+				t.update(func() {
+					t.tlsHandshakeDone = time.Now()
+				})
 			},
 		},
 	)

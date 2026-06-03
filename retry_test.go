@@ -2,14 +2,27 @@ package req
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"math"
 	"net/http"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/jwwsjlm/req/v3/internal/tests"
 )
+
+type trackingBody struct {
+	*strings.Reader
+	closed *int32
+}
+
+func (b *trackingBody) Close() error {
+	atomic.AddInt32(b.closed, 1)
+	return nil
+}
 
 func TestRetryBackOff(t *testing.T) {
 	testRetry(t, func(r *Request) {
@@ -170,6 +183,47 @@ func TestRetryFalse(t *testing.T) {
 	tests.AssertNotNil(t, err)
 	tests.AssertIsNil(t, resp.Response)
 	tests.AssertEqual(t, 0, resp.Request.RetryAttempt)
+}
+
+func TestRetryClosesPreviousResponseBody(t *testing.T) {
+	var retryBodyClosed int32
+	var finalBodyClosed int32
+	var attempts int32
+
+	c := C()
+	c.Transport.WrapRoundTripFunc(func(rt http.RoundTripper) HttpRoundTripFunc {
+		return func(req *http.Request) (*http.Response, error) {
+			attempt := atomic.AddInt32(&attempts, 1)
+			statusCode := http.StatusServiceUnavailable
+			closed := &retryBodyClosed
+			if attempt > 1 {
+				statusCode = http.StatusOK
+				closed = &finalBodyClosed
+			}
+			body := "retry body"
+			return &http.Response{
+				StatusCode:    statusCode,
+				Status:        fmt.Sprintf("%d %s", statusCode, http.StatusText(statusCode)),
+				Header:        make(http.Header),
+				Body:          &trackingBody{Reader: strings.NewReader(body), closed: closed},
+				ContentLength: int64(len(body)),
+				Request:       req,
+			}, nil
+		}
+	})
+
+	resp, err := c.R().
+		SetRetryCount(1).
+		SetRetryFixedInterval(0).
+		SetRetryCondition(func(resp *Response, err error) bool {
+			return err != nil || resp.StatusCode == http.StatusServiceUnavailable
+		}).
+		Get("http://example.com")
+
+	assertSuccess(t, resp, err)
+	tests.AssertEqual(t, int32(2), atomic.LoadInt32(&attempts))
+	tests.AssertEqual(t, int32(1), atomic.LoadInt32(&retryBodyClosed))
+	tests.AssertEqual(t, int32(1), atomic.LoadInt32(&finalBodyClosed))
 }
 
 func TestRetryTurnedOffWhenRetryCountEqZero(t *testing.T) {

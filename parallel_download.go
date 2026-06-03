@@ -32,6 +32,9 @@ type ParallelDownload struct {
 	taskMap      map[int]*downloadTask
 	taskNotifyCh chan *downloadTask
 	mu           sync.Mutex
+	doneOnce     sync.Once
+	cleanupOnce  sync.Once
+	cleanupErr   error
 	lastIndex    int
 }
 
@@ -39,12 +42,10 @@ func (pd *ParallelDownload) completeTask(task *downloadTask) {
 	pd.mu.Lock()
 	pd.taskMap[task.index] = task
 	pd.mu.Unlock()
-	go func() {
-		select {
-		case pd.taskNotifyCh <- task:
-		case <-pd.doneCh:
-		}
-	}()
+	select {
+	case pd.taskNotifyCh <- task:
+	case <-pd.doneCh:
+	}
 }
 
 func (pd *ParallelDownload) popTask(index int) *downloadTask {
@@ -56,14 +57,57 @@ func (pd *ParallelDownload) popTask(index int) *downloadTask {
 	}
 	pd.mu.Unlock()
 	for {
-		task := <-pd.taskNotifyCh
-		if task.index == index {
-			pd.mu.Lock()
-			delete(pd.taskMap, index)
-			pd.mu.Unlock()
-			return task
+		select {
+		case task := <-pd.taskNotifyCh:
+			if task.index == index {
+				pd.mu.Lock()
+				delete(pd.taskMap, index)
+				pd.mu.Unlock()
+				return task
+			}
+		case <-pd.doneCh:
+			return nil
 		}
 	}
+}
+
+func (pd *ParallelDownload) stop() {
+	pd.doneOnce.Do(func() {
+		close(pd.doneCh)
+	})
+}
+
+func (pd *ParallelDownload) reportError(err error) {
+	if err == nil {
+		return
+	}
+	select {
+	case pd.errCh <- err:
+	default:
+	}
+	pd.stop()
+}
+
+func (pd *ParallelDownload) errOrCanceled() error {
+	select {
+	case err := <-pd.errCh:
+		return err
+	default:
+		return context.Canceled
+	}
+}
+
+func (pd *ParallelDownload) cleanupTempDir() error {
+	pd.cleanupOnce.Do(func() {
+		if pd.tempDir == "" {
+			return
+		}
+		if pd.client.DebugLog {
+			pd.client.log.Debugf("removing temporary directory %s", pd.tempDir)
+		}
+		pd.cleanupErr = os.RemoveAll(pd.tempDir)
+	})
+	return pd.cleanupErr
 }
 
 func md5Sum(s string) string {
@@ -97,9 +141,12 @@ func (pd *ParallelDownload) ensure() error {
 	pd.taskCh = make(chan *downloadTask)
 	pd.doneCh = make(chan struct{})
 	pd.wgDoneCh = make(chan struct{})
-	pd.errCh = make(chan error)
+	pd.errCh = make(chan error, 1)
 	pd.taskMap = make(map[int]*downloadTask)
-	pd.taskNotifyCh = make(chan *downloadTask)
+	pd.taskNotifyCh = make(chan *downloadTask, pd.concurrency)
+	pd.doneOnce = sync.Once{}
+	pd.cleanupOnce = sync.Once{}
+	pd.cleanupErr = nil
 	return nil
 }
 
@@ -155,16 +202,17 @@ func (pd *ParallelDownload) handleTask(t *downloadTask, ctx ...context.Context) 
 	}
 	file, err := os.OpenFile(t.tempFilename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
-		pd.errCh <- err
+		pd.reportError(err)
 		return
 	}
+	defer file.Close()
 	err = pd.client.Get(pd.url).
 		SetHeader("Range", fmt.Sprintf("bytes=%d-%d", t.rangeStart, t.rangeEnd)).
 		SetOutput(file).
 		Do(ctx...).Err
 
 	if err != nil {
-		pd.errCh <- err
+		pd.reportError(err)
 		return
 	}
 	t.tempFile = file
@@ -184,22 +232,28 @@ func (pd *ParallelDownload) startWorker(ctx ...context.Context) {
 
 func (pd *ParallelDownload) mergeFile() {
 	defer pd.wg.Done()
-	file, err := pd.getOutputFile()
+	file, closeOutput, err := pd.getOutputFile()
 	if err != nil {
-		pd.errCh <- err
+		pd.reportError(err)
 		return
+	}
+	if closeOutput != nil {
+		defer closeOutput.Close()
 	}
 	for i := 0; ; i++ {
 		task := pd.popTask(i)
+		if task == nil {
+			return
+		}
 		tempFile, err := os.Open(task.tempFilename)
 		if err != nil {
-			pd.errCh <- err
+			pd.reportError(err)
 			return
 		}
 		_, err = io.Copy(file, tempFile)
 		tempFile.Close()
 		if err != nil {
-			pd.errCh <- err
+			pd.reportError(err)
 			return
 		}
 		if i < pd.lastIndex {
@@ -207,12 +261,8 @@ func (pd *ParallelDownload) mergeFile() {
 		}
 		break
 	}
-	if pd.client.DebugLog {
-		pd.client.log.Debugf("removing temporary directory %s", pd.tempDir)
-	}
-	err = os.RemoveAll(pd.tempDir)
-	if err != nil {
-		pd.errCh <- err
+	if err = pd.cleanupTempDir(); err != nil {
+		pd.reportError(err)
 	}
 }
 
@@ -221,9 +271,13 @@ func (pd *ParallelDownload) Do(ctx ...context.Context) error {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		_ = pd.cleanupTempDir()
+	}()
 	for i := 0; i < pd.concurrency; i++ {
 		go pd.startWorker(ctx...)
 	}
+	defer pd.stop()
 	resp := pd.client.Head(pd.url).Do(ctx...)
 	if resp.Err != nil {
 		return resp.Err
@@ -250,7 +304,11 @@ func (pd *ParallelDownload) Do(ctx ...context.Context) error {
 			rangeStart: start,
 			rangeEnd:   end,
 		}
-		pd.taskCh <- task
+		select {
+		case pd.taskCh <- task:
+		case <-pd.doneCh:
+			return pd.errOrCanceled()
+		}
 		if end < (totalBytes - 1) {
 			start = end + 1
 			continue
@@ -259,6 +317,11 @@ func (pd *ParallelDownload) Do(ctx ...context.Context) error {
 	}
 	select {
 	case <-pd.wgDoneCh:
+		select {
+		case err := <-pd.errCh:
+			return err
+		default:
+		}
 		if pd.client.DebugLog {
 			if pd.filename != "" {
 				pd.client.log.Debugf("download completed from %s to %s", pd.url, pd.filename)
@@ -266,17 +329,18 @@ func (pd *ParallelDownload) Do(ctx ...context.Context) error {
 				pd.client.log.Debugf("download completed for %s", pd.url)
 			}
 		}
-		close(pd.doneCh)
 	case err := <-pd.errCh:
+		pd.stop()
+		<-pd.wgDoneCh
 		return err
 	}
 	return nil
 }
 
-func (pd *ParallelDownload) getOutputFile() (io.Writer, error) {
+func (pd *ParallelDownload) getOutputFile() (io.Writer, io.Closer, error) {
 	outputFile := pd.output
 	if outputFile != nil {
-		return outputFile, nil
+		return outputFile, nil, nil
 	}
 	if pd.filename == "" {
 		u, err := urlpkg.Parse(pd.url)
@@ -297,5 +361,9 @@ func (pd *ParallelDownload) getOutputFile() (io.Writer, error) {
 	if pd.client.outputDirectory != "" && !filepath.IsAbs(pd.filename) {
 		pd.filename = filepath.Join(pd.client.outputDirectory, pd.filename)
 	}
-	return os.OpenFile(pd.filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, pd.perm)
+	file, err := os.OpenFile(pd.filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, pd.perm)
+	if err != nil {
+		return nil, nil, err
+	}
+	return file, file, nil
 }

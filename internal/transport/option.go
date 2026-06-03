@@ -179,7 +179,7 @@ func (o Options) Clone() Options {
 	}
 	if o.Dump != nil {
 		oo.Dump = o.Dump.Clone()
-		go oo.Dump.Start()
+		oo.Dump.StartAsync()
 	}
 	return oo
 }

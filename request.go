@@ -69,6 +69,7 @@ type Request struct {
 	output                   io.Writer
 	trace                    *clientTrace
 	dumpBuffer               *bytes.Buffer
+	dumpOutputCloser         io.Closer
 	responseReturnTime       time.Time
 	afterResponse            []ResponseMiddleware
 }
@@ -90,73 +91,74 @@ func (r *Request) TraceInfo() TraceInfo {
 	if ct == nil {
 		return TraceInfo{}
 	}
+	ts := ct.snapshot()
 
 	ti := TraceInfo{
-		IsConnReused:  ct.gotConnInfo.Reused,
-		IsConnWasIdle: ct.gotConnInfo.WasIdle,
-		ConnIdleTime:  ct.gotConnInfo.IdleTime,
+		IsConnReused:  ts.gotConnInfo.Reused,
+		IsConnWasIdle: ts.gotConnInfo.WasIdle,
+		ConnIdleTime:  ts.gotConnInfo.IdleTime,
 	}
 
-	endTime := ct.endTime
+	endTime := ts.endTime
 	if endTime.IsZero() { // in case timeout
 		endTime = r.responseReturnTime
 	}
 
-	if !ct.tlsHandshakeStart.IsZero() {
-		if !ct.tlsHandshakeDone.IsZero() {
-			ti.TLSHandshakeTime = traceDuration(ct.tlsHandshakeDone, ct.tlsHandshakeStart)
+	if !ts.tlsHandshakeStart.IsZero() {
+		if !ts.tlsHandshakeDone.IsZero() {
+			ti.TLSHandshakeTime = traceDuration(ts.tlsHandshakeDone, ts.tlsHandshakeStart)
 		} else {
-			ti.TLSHandshakeTime = traceDuration(endTime, ct.tlsHandshakeStart)
+			ti.TLSHandshakeTime = traceDuration(endTime, ts.tlsHandshakeStart)
 		}
 	}
 
-	traceStart := ct.getConn
+	traceStart := ts.getConn
 	if traceStart.IsZero() {
 		traceStart = r.StartTime
 	}
-	if ct.gotConnInfo.Reused {
+	if ts.gotConnInfo.Reused {
 		ti.TotalTime = traceDuration(endTime, traceStart)
 	} else {
-		if ct.dnsStart.IsZero() {
+		if ts.dnsStart.IsZero() {
 			ti.TotalTime = traceDuration(endTime, r.StartTime)
 		} else {
-			ti.TotalTime = traceDuration(endTime, ct.dnsStart)
+			ti.TotalTime = traceDuration(endTime, ts.dnsStart)
 		}
 	}
 
-	dnsDone := ct.dnsDone
+	dnsDone := ts.dnsDone
 	if dnsDone.IsZero() {
 		dnsDone = endTime
 	}
 
-	if !ct.dnsStart.IsZero() {
-		ti.DNSLookupTime = traceDuration(dnsDone, ct.dnsStart)
+	if !ts.dnsStart.IsZero() {
+		ti.DNSLookupTime = traceDuration(dnsDone, ts.dnsStart)
 	}
 
 	// Only calculate on successful connections
-	if !ct.connectDone.IsZero() {
-		ti.TCPConnectTime = traceDuration(ct.connectDone, dnsDone)
+	if !ts.connectDone.IsZero() {
+		ti.TCPConnectTime = traceDuration(ts.connectDone, dnsDone)
 	}
 
 	// Only calculate on successful connections
-	if !ct.gotConn.IsZero() {
-		ti.ConnectTime = traceDuration(ct.gotConn, traceStart)
+	if !ts.gotConn.IsZero() {
+		ti.ConnectTime = traceDuration(ts.gotConn, traceStart)
 	}
 
 	// Only calculate on successful connections
-	if !ct.gotFirstResponseByte.IsZero() {
-		firstResponseStart := ct.gotConn
+	if !ts.gotFirstResponseByte.IsZero() {
+		firstResponseStart := ts.gotConn
 		if firstResponseStart.IsZero() {
 			firstResponseStart = traceStart
 		}
-		ti.FirstResponseTime = traceDuration(ct.gotFirstResponseByte, firstResponseStart)
-		ti.ResponseTime = traceDuration(endTime, ct.gotFirstResponseByte)
+		ti.FirstResponseTime = traceDuration(ts.gotFirstResponseByte, firstResponseStart)
+		ti.ResponseTime = traceDuration(endTime, ts.gotFirstResponseByte)
 	}
 
 	// Capture remote address info when connection is non-nil
-	if ct.gotConnInfo.Conn != nil {
-		ti.RemoteAddr = ct.gotConnInfo.Conn.RemoteAddr()
-		ti.LocalAddr = ct.gotConnInfo.Conn.LocalAddr()
+	if ts.gotConnInfo.Conn != nil {
+		ti.RemoteAddr = ts.gotConnInfo.Conn.RemoteAddr()
+		ti.LocalAddr = ts.gotConnInfo.Conn.LocalAddr()
 	}
 
 	return ti
@@ -338,12 +340,6 @@ func (r *Request) SetFiles(files map[string]string) *Request {
 // SetFile set up a multipart form from file path to upload,
 // which read file from filePath automatically to upload.
 func (r *Request) SetFile(paramName, filePath string) *Request {
-	file, err := os.Open(filePath)
-	if err != nil {
-		r.client.log.Errorf("failed to open %s: %v", filePath, err)
-		r.appendError(err)
-		return r
-	}
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
 		r.client.log.Errorf("failed to stat file %s: %v", filePath, err)
@@ -355,13 +351,7 @@ func (r *Request) SetFile(paramName, filePath string) *Request {
 		ParamName: paramName,
 		FileName:  filepath.Base(filePath),
 		GetFileContent: func() (io.ReadCloser, error) {
-			if r.RetryAttempt > 0 {
-				file, err = os.Open(filePath)
-				if err != nil {
-					return nil, err
-				}
-			}
-			return file, nil
+			return os.Open(filePath)
 		},
 		FileSize: fileInfo.Size(),
 	})
@@ -751,10 +741,22 @@ func (r *Request) appendError(err error) {
 
 var errRetryableWithUnReplayableBody = errors.New("retryable request should not have unreplayable Body (io.Reader)")
 
+const maxRetryBodyDrainSize = 2 << 10
+
 func (r *Request) newErrorResponse(err error) *Response {
 	resp := &Response{Request: r}
 	resp.Err = err
 	return resp
+}
+
+func closeRetryResponseBody(resp *Response) {
+	if resp == nil || resp.Response == nil || resp.Body == nil {
+		return
+	}
+	if resp.ContentLength >= 0 && resp.ContentLength <= maxRetryBodyDrainSize {
+		_, _ = io.Copy(io.Discard, resp.Body)
+	}
+	_ = resp.Body.Close()
 }
 
 // Do fires http request, 0 or 1 context is allowed, and returns the *Response which
@@ -767,6 +769,7 @@ func (r *Request) Do(ctx ...context.Context) *Response {
 	defer func() {
 		r.responseReturnTime = time.Now()
 	}()
+	defer r.closeDumpOutput()
 	if r.error != nil {
 		return r.newErrorResponse(r.error)
 	}
@@ -843,7 +846,9 @@ func (r *Request) do() (resp *Response, err error) {
 				r.retryOption.RetryHooks[i](resp, err)
 			}
 		}
-		time.Sleep(r.retryOption.GetRetryInterval(resp, r.RetryAttempt))
+		retryInterval := r.retryOption.GetRetryInterval(resp, r.RetryAttempt)
+		closeRetryResponseBody(resp)
+		time.Sleep(retryInterval)
 
 		// clean up before retry
 		if r.dumpBuffer != nil {
@@ -1168,19 +1173,35 @@ func (r *Request) getDumpOptions() *DumpOptions {
 
 // EnableDumpTo enables dump and save to the specified io.Writer.
 func (r *Request) EnableDumpTo(output io.Writer) *Request {
+	r.closeDumpOutput()
 	r.getDumpOptions().Output = output
 	return r.EnableDump()
 }
 
 // EnableDumpToFile enables dump and save to the specified filename.
 func (r *Request) EnableDumpToFile(filename string) *Request {
+	r.closeDumpOutput()
 	file, err := os.Create(filename)
 	if err != nil {
 		r.appendError(err)
 		return r
 	}
 	r.getDumpOptions().Output = file
+	r.dumpOutputCloser = file
 	return r.EnableDump()
+}
+
+func (r *Request) closeDumpOutput() {
+	if r.dumpOutputCloser == nil {
+		return
+	}
+	if err := r.dumpOutputCloser.Close(); err != nil {
+		r.client.log.Warnf("close dump output error: %v", err)
+	}
+	r.dumpOutputCloser = nil
+	if r.dumpOptions != nil {
+		r.dumpOptions.Output = r.getDumpBuffer()
+	}
 }
 
 // SetDumpOptions sets DumpOptions at request level.
@@ -1188,6 +1209,7 @@ func (r *Request) SetDumpOptions(opt *DumpOptions) *Request {
 	if opt == nil {
 		return r
 	}
+	r.closeDumpOutput()
 	if opt.Output == nil {
 		opt.Output = r.getDumpBuffer()
 	}

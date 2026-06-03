@@ -852,7 +852,7 @@ func (t *Transport) Clone() *Transport {
 func (t *Transport) EnableDump(opt *DumpOptions) {
 	dump := newDumper(opt)
 	t.Dump = dump
-	go dump.Start()
+	dump.StartAsync()
 }
 
 // DisableDump disables the dump.

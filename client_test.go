@@ -702,6 +702,7 @@ func TestEnableDumpAllToFile(t *testing.T) {
 	c.EnableDumpAllToFile(tests.GetTestFilePath(dumpFile))
 	resp, err := c.R().SetBody("test body").Post("/")
 	assertSuccess(t, resp, err)
+	c.DisableDumpAll()
 	dump := string(getTestFileContent(t, dumpFile))
 	os.Remove(tests.GetTestFilePath(dumpFile))
 	tests.AssertContains(t, dump, "user-agent", true)
