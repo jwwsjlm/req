@@ -753,9 +753,78 @@ if err != nil {
 defer resp.Body.Close()
 ```
 
-## CookieJar Factory
+## Cookie 使用
 
-支持标准 `http.CookieJar`：
+默认 `req.C()` 会启用内存 CookieJar。只要复用同一个 client，服务端 `Set-Cookie` 会自动保存，后续同域名请求会自动带上 Cookie。
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+
+	"github.com/jwwsjlm/req/v3"
+)
+
+func main() {
+	client := req.C()
+
+	_, err := client.R().
+		SetBodyJsonString(`{"username":"demo","password":"secret"}`).
+		Post("https://example.com/login")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	resp, err := client.R().Get("https://example.com/me")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(resp.String())
+}
+```
+
+手动给单次请求设置 Cookie：
+
+```go
+resp, err := client.R().
+	SetCookies(
+		&http.Cookie{Name: "sid", Value: "xxx"},
+		&http.Cookie{Name: "theme", Value: "dark"},
+	).
+	Get("https://example.com/me")
+```
+
+给 client 设置公共 Cookie：
+
+```go
+client := req.C().
+	SetCommonCookies(
+		&http.Cookie{Name: "locale", Value: "zh-CN"},
+	)
+```
+
+读取当前 Cookie：
+
+```go
+cookies, err := client.GetCookies("https://example.com")
+if err != nil {
+	log.Fatal(err)
+}
+for _, cookie := range cookies {
+	fmt.Println(cookie.Name, cookie.Value)
+}
+```
+
+清空 Cookie：
+
+```go
+client.ClearCookies()
+```
+
+自定义 CookieJar：
 
 ```go
 client := req.C().
@@ -775,19 +844,32 @@ client := req.C().
 	})
 ```
 
-读取和清空 Cookie：
+如果你想禁用自动 Cookie：
 
 ```go
-cookies, err := client.GetCookies("https://example.com")
-client.ClearCookies()
+client := req.C().
+	SetCookieJar(nil)
 ```
 
-请求级 Cookie：
+`Clone()` 时要注意：
+
+- `SetCookieJarFactory`：clone 后会重新创建 CookieJar，适合每个账号/任务隔离 Cookie。
+- `SetCookieJar`：clone 后会共享同一个 CookieJar，适合多个 client 共用同一登录态。
+
+多账号推荐这样写：
 
 ```go
-resp, err := client.R().
-	SetCookies(&http.Cookie{Name: "sid", Value: "xxx"}).
-	Get("https://example.com")
+func NewAccountClient() *req.Client {
+	return req.C().
+		SetCookieJarFactory(func() http.CookieJar {
+			jar, _ := cookiejar.New(nil)
+			return jar
+		}).
+		ImpersonateChromeWithOS(req.BrowserOSWindows)
+}
+
+accountA := NewAccountClient()
+accountB := NewAccountClient()
 ```
 
 ## 文件上传
@@ -930,6 +1012,88 @@ if tlsInfo != nil {
 	fmt.Println(tlsInfo.FingerprintSHA256OpenSSL)
 }
 ```
+
+## HTTP 指纹正确使用
+
+HTTP 指纹不是只改 `User-Agent`。真实浏览器访问时，服务端通常会同时看到：
+
+- TLS 指纹：JA3、JA4、扩展顺序、cipher suites、ALPN。
+- HTTP/2 指纹：SETTINGS、WINDOW_UPDATE、pseudo header order、header order、priority。
+- Header 组合：`sec-ch-ua`、`sec-fetch-*`、`accept-language`、`accept-encoding`、`priority` 等。
+- Cookie 行为：登录态、同域自动携带、跳转后的 Cookie 更新。
+- 协议选择：HTTP/2、HTTP/3、Alt-Svc 回退。
+
+推荐优先使用内置浏览器 profile：
+
+```go
+client := req.C().
+	ImpersonateChromeWithOS(req.BrowserOSWindows).
+	SetDNSOverTLSCloudflare().
+	EnableHTTP3().
+	EnableHTTP3FallbackOnError().
+	SetHTTP3AltSvcFailureCooldown(30 * time.Second)
+```
+
+Firefox：
+
+```go
+client := req.C().
+	ImpersonateFirefoxWithOS(req.BrowserOSWindows).
+	EnableHTTP3().
+	EnableHTTP3FallbackOnError()
+```
+
+随机系统 profile：
+
+```go
+client := req.C().
+	ImpersonateChromeRandomOS()
+```
+
+登录型站点建议配合 CookieJar，保持一个 client 对应一个账号：
+
+```go
+func NewBrowserSession() *req.Client {
+	return req.C().
+		SetCookieJarFactory(func() http.CookieJar {
+			jar, _ := cookiejar.New(nil)
+			return jar
+		}).
+		ImpersonateChromeWithOS(req.BrowserOSWindows).
+		EnableHTTP3().
+		EnableHTTP3FallbackOnError()
+}
+```
+
+只设置 UA 不够：
+
+```go
+client := req.C().
+	SetUserAgent("Mozilla/5.0 ... Chrome/133.0.0.0 ...")
+```
+
+上面这种只会改 header，TLS/HTTP2 指纹仍然不像浏览器。需要自己细调时，至少要组合这些方法：
+
+```go
+client := req.C().
+	SetTLSFingerprintChrome().
+	SetCommonHeaderOrder(
+		"sec-ch-ua",
+		"sec-ch-ua-mobile",
+		"sec-ch-ua-platform",
+		"user-agent",
+		"accept",
+		"sec-fetch-site",
+		"sec-fetch-mode",
+		"sec-fetch-dest",
+		"accept-encoding",
+		"accept-language",
+	).
+	SetCommonPseudoHeaderOder(":method", ":authority", ":scheme", ":path").
+	SetHTTP2ConnectionFlow(15663105)
+```
+
+更推荐直接用 `ImpersonateChromeWithOS`，因为它会把 TLS、HTTP/2、HTTP/3、header、multipart boundary 一起配置好。
 
 ## 指纹测试
 
