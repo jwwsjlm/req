@@ -23,19 +23,20 @@
 | 场景 | 常用方法 |
 | --- | --- |
 | 创建请求 | `C()`、`R()`、`Get()`、`Post()`、`Put()`、`Patch()`、`Delete()` |
-| URL 参数 | `SetQueryParam`、`SetQueryParams`、`SetPathParam`、`SetPathParams` |
+| URL 参数 | `SetBaseURL`、`SetScheme`、`SetQueryParam`、`SetQueryParamsFromStruct`、`SetQueryString`、`SetPathParam` |
 | Header/Cookie | `SetHeader`、`SetHeaders`、`SetCookies`、`SetCookieJarFactory` |
-| Body | `SetBody`、`SetBodyString`、`SetBodyJsonString`、`SetBodyJsonMarshal`、`SetFormData` |
-| 结果解析 | `SetSuccessResult`、`SetErrorResult`、`Into`、`UnmarshalJson`、`ToString`、`ToBytes` |
+| Body | `SetBody`、`SetBodyString`、`SetBodyJsonString`、`SetBodyJsonMarshal`、`SetBodyXmlMarshal`、`SetFormData`、`SetOrderedFormData` |
+| 结果解析 | `SetSuccessResult`、`SetErrorResult`、`Into`、`UnmarshalJson`、`UnmarshalXml`、`ToString`、`ToBytes` |
 | 错误处理 | `SetCommonErrorResult`、`SetResultStateCheckFunc`、`OnError`、`OnAfterResponse` |
 | 重试 | `SetCommonRetryCount`、`SetCommonRetryBackoffInterval`、`SetRetryCount`、`SetRetryCondition` |
-| 调试 | `DevMode`、`EnableDump`、`EnableDumpEachRequest`、`EnableTraceAll` |
+| 调试 | `DevMode`、`EnableDump`、`EnableDumpEachRequest`、`EnableTraceAll`、`EnableTrace`、`TraceInfo` |
 | 浏览器伪装 | `ImpersonateChromeWithOS`、`ImpersonateChromeRandomOS`、`ImpersonateFirefoxWithOS`、`ImpersonateSafari` |
 | TLS 指纹 | `SetTLSFingerprintJA3`、`SetTLSFingerprintSpec`、`SetTLSFingerprintChrome` |
 | DNS | `SetDNSResolver`、`SetDNSOverTLSCloudflare`、`SetDNSOverTLS` |
 | HTTP/2 | `EnableForceHTTP2`、`SetHTTP2SettingsFrame`、`SetHTTP2InitialStreamID` |
 | HTTP/3 | `EnableHTTP3`、`EnableForceHTTP3`、`EnableHTTP3FallbackOnError`、`SetHTTP3QUICPerformanceProfile` |
-| 上传下载 | `SetFile`、`SetFiles`、`SetFileBytes`、`SetOutputFile`、`SetUploadCallback`、`SetDownloadCallback` |
+| 上传下载 | `SetFile`、`SetFiles`、`SetFileBytes`、`SetOutputFile`、`SetOutputDirectory`、`NewParallelDownload` |
+| 扩展集成 | `GetClient`、`GetTransport`、`Do`、`WrapRoundTripFunc`、`SetResponseBodyTransformer` |
 
 ## 安装
 
@@ -149,6 +150,54 @@ client.Head(url)
 client.Options(url)
 ```
 
+## BaseURL、Scheme 和公共参数
+
+写 API client 时推荐把公共配置放到 client 上，单个请求只写相对路径和差异参数。
+
+```go
+type SearchParams struct {
+	Q    string   `url:"q"`
+	Page int      `url:"page"`
+	Tags []string `url:"tag"`
+}
+
+client := req.C().
+	SetBaseURL("https://api.example.com").
+	SetCommonHeader("Accept", "application/json").
+	SetCommonQueryParam("locale", "zh-CN").
+	SetCommonPathParam("version", "v1")
+
+resp, err := client.R().
+	SetPathParam("id", "42").
+	SetQueryParamsFromStruct(SearchParams{
+		Q:    "req",
+		Page: 1,
+		Tags: []string{"go", "http"},
+	}).
+	Get("/{version}/users/{id}")
+```
+
+如果传入的是没有 scheme 的完整域名，可以给 client 设置默认 scheme：
+
+```go
+client := req.C().
+	SetScheme("https")
+
+resp, err := client.R().Get("example.com/api")
+```
+
+已经有 `url.Values` 时可以直接复用：
+
+```go
+values := url.Values{}
+values.Add("tag", "go")
+values.Add("tag", "http")
+
+resp, err := client.R().
+	SetQueryParamsFromValues(values).
+	Get("https://api.example.com/search")
+```
+
 ## 请求构造
 
 Query 参数：
@@ -161,6 +210,22 @@ resp, err := client.R().
 		"q":    "req",
 	}).
 	Get("https://api.example.com/repos")
+```
+
+追加同名参数：
+
+```go
+resp, err := client.R().
+	AddQueryParams("tag", "go", "http").
+	Get("https://api.example.com/search")
+```
+
+原始 query string：
+
+```go
+resp, err := client.R().
+	SetQueryString("page=1&tag=go&tag=http").
+	Get("https://api.example.com/search")
 ```
 
 Path 参数：
@@ -192,6 +257,18 @@ resp, err := client.R().
 		"username": "demo",
 		"password": "secret",
 	}).
+	Post("https://example.com/login")
+```
+
+需要固定字段顺序的表单：
+
+```go
+resp, err := client.R().
+	SetOrderedFormData(
+		"username", "demo",
+		"password", "secret",
+		"otp", "123456",
+	).
 	Post("https://example.com/login")
 ```
 
@@ -238,6 +315,14 @@ resp, err := client.R().
 	Post("https://httpbin.org/post")
 ```
 
+自定义 JSON 编解码器：
+
+```go
+client := req.C().
+	SetJsonMarshal(json.Marshal).
+	SetJsonUnmarshal(json.Unmarshal)
+```
+
 手动读取响应：
 
 ```go
@@ -255,6 +340,43 @@ var out struct {
 resp, err := client.R().
 	SetSuccessResult(&out).
 	Get("https://httpbin.org/ip")
+```
+
+## XML 请求和响应
+
+```go
+type UserXML struct {
+	XMLName xml.Name `xml:"user"`
+	Name    string   `xml:"name"`
+}
+
+resp, err := client.R().
+	SetBodyXmlMarshal(UserXML{Name: "req"}).
+	Post("https://api.example.com/users")
+if err != nil {
+	log.Fatal(err)
+}
+
+var out UserXML
+if err := resp.UnmarshalXml(&out); err != nil {
+	log.Fatal(err)
+}
+```
+
+也可以直接发送 XML 字符串：
+
+```go
+resp, err := client.R().
+	SetBodyXmlString(`<user><name>req</name></user>`).
+	Post("https://api.example.com/users")
+```
+
+自定义 XML 编解码器：
+
+```go
+client := req.C().
+	SetXmlMarshal(xml.Marshal).
+	SetXmlUnmarshal(xml.Unmarshal)
 ```
 
 ## 错误处理
@@ -301,6 +423,24 @@ if err != nil {
 if resp.IsErrorState() {
 	log.Printf("api error: %+v", errBody)
 }
+```
+
+自定义哪些状态码算成功或错误：
+
+```go
+client := req.C().
+	SetResultStateCheckFunc(func(resp *req.Response) req.ResultState {
+		if resp.StatusCode == http.StatusNotModified {
+			return req.SuccessState
+		}
+		if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
+			return req.SuccessState
+		}
+		if resp.StatusCode >= 400 {
+			return req.ErrorState
+		}
+		return req.UnknownState
+	})
 ```
 
 ## 认证
@@ -457,6 +597,92 @@ resp, err := req.C().R().
 if err != nil {
 	fmt.Println(resp.Dump())
 }
+```
+
+## TraceInfo 性能排查
+
+需要看 DNS、TCP、TLS、首包和响应耗时时打开 trace。`DevMode()` 会自动启用 trace，生产中建议按需开启。
+
+```go
+client := req.C().
+	EnableTraceAll()
+
+resp, err := client.R().Get("https://example.com")
+if err != nil {
+	log.Fatal(err)
+}
+
+trace := resp.TraceInfo()
+fmt.Println(trace)
+fmt.Println(trace.Blame())
+fmt.Println(trace.TotalTime, trace.DNSLookupTime, trace.TLSHandshakeTime)
+```
+
+也可以只给单次请求开启：
+
+```go
+resp, err := client.R().
+	EnableTrace().
+	Get("https://example.com")
+```
+
+注意：当前 HTTP/3 不支持 `TraceInfo`，排查 H3 建议同时打开 dump、debug log 或回退到 H2 对照。
+
+## 标准库兼容和扩展点
+
+拿到底层 `*http.Client`：
+
+```go
+client := req.C().
+	SetTimeout(10 * time.Second)
+
+httpClient := client.GetClient()
+```
+
+直接执行标准库 `*http.Request`：
+
+```go
+client := req.C()
+
+rawReq, err := http.NewRequest(http.MethodGet, "https://example.com", nil)
+if err != nil {
+	log.Fatal(err)
+}
+rawReq.Header.Set("Accept", "application/json")
+
+rawResp, err := client.Do(rawReq)
+if err != nil {
+	log.Fatal(err)
+}
+defer rawResp.Body.Close()
+```
+
+`Do(*http.Request)` 是标准库直通，会复用底层 client/transport，但不会自动套用 `R()` 的 query、body、结果解析和 req 级 middleware。
+
+包装 req 级 round trip，适合统一埋点、日志、限流：
+
+```go
+client := req.C().
+	WrapRoundTripFunc(func(rt req.RoundTripper) req.RoundTripFunc {
+		return func(r *req.Request) (*req.Response, error) {
+			start := time.Now()
+			resp, err := rt.RoundTrip(r)
+			log.Printf("%s %s cost=%s err=%v", r.Method, r.RawURL, time.Since(start), err)
+			return resp, err
+		}
+	})
+```
+
+包装底层 `http.RoundTripper`，适合跟只认识标准库的组件对接：
+
+```go
+client.GetTransport().
+	WrapRoundTripFunc(func(rt http.RoundTripper) req.HttpRoundTripFunc {
+		return func(r *http.Request) (*http.Response, error) {
+			r.Header.Set("X-From", "req")
+			return rt.RoundTrip(r)
+		}
+	})
 ```
 
 ## 浏览器伪装
@@ -741,6 +967,32 @@ client := req.C().
 	DisableAutoDecode()
 ```
 
+只对指定 Content-Type 自动转码：
+
+```go
+client := req.C().
+	SetAutoDecodeContentType("text", "html")
+```
+
+自己决定哪些响应需要转码：
+
+```go
+client := req.C().
+	SetAutoDecodeContentTypeFunc(func(contentType string) bool {
+		return strings.Contains(contentType, "text/") ||
+			strings.Contains(contentType, "json")
+	})
+```
+
+统一改写响应 body，适合解包、解密、去 BOM、兼容非标准 API：
+
+```go
+client := req.C().
+	SetResponseBodyTransformer(func(rawBody []byte, r *req.Request, resp *req.Response) ([]byte, error) {
+		return bytes.TrimSpace(rawBody), nil
+	})
+```
+
 大响应不想自动读入内存：
 
 ```go
@@ -951,6 +1203,32 @@ resp, err := req.C().R().
 	}).
 	SetOutputFile("./out.bin").
 	Get("https://example.com/file.bin")
+```
+
+统一下载目录：
+
+```go
+client := req.C().
+	SetOutputDirectory("./downloads")
+
+resp, err := client.R().
+	SetOutputFile("file.bin").
+	Get("https://example.com/file.bin")
+```
+
+并行分片下载，适合服务端支持 `Range`，并且 `HEAD` 能返回 `Content-Length` 的大文件：
+
+```go
+err := req.C().
+	SetOutputDirectory("./downloads").
+	NewParallelDownload("https://example.com/big.zip").
+	SetOutputFile("big.zip").
+	SetConcurrency(8).
+	SetSegmentSize(16 * 1024 * 1024).
+	Do()
+if err != nil {
+	log.Fatal(err)
+}
 ```
 
 ## 推荐自用模板
