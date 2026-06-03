@@ -4,6 +4,8 @@
 
 原版文档仍然可以参考：[https://req.cool](https://req.cool)
 
+第一次接触 Go 或第一次用这个库，建议先看：[示例.md](示例.md)。那份文档从 `go mod init`、`go get`、第一个 `GET` 请求开始，一直写到 JSON、表单、Cookie、上传下载、代理、重试、浏览器伪装、HTTP/3 和常见报错。
+
 ## 主要能力
 
 - 简洁链式 API，保留 `req.C().R().Get(...)` 这种写法。
@@ -46,6 +48,8 @@ go get github.com/jwwsjlm/req/v3
 ```
 
 要求 Go `1.24+`。
+
+如果你还不熟 Go module、`main.go`、`go run` 这些基础步骤，先按 [示例.md](示例.md) 跑一遍最小项目。
 
 ## 推荐使用方式
 
