@@ -931,6 +931,50 @@ if tlsInfo != nil {
 }
 ```
 
+## 指纹测试
+
+可以用 [tls.peet.ws/api/all](https://tls.peet.ws/api/all) 检查当前请求的 TLS、JA3/JA4、HTTP/2 Akamai 指纹和请求头。
+
+最小测试代码：
+
+```go
+const endpoint = "https://tls.peet.ws/api/all"
+
+clients := map[string]*req.Client{
+	"default": req.C(),
+	"chrome": req.C().
+		ImpersonateChromeWithOS(req.BrowserOSWindows),
+	"firefox": req.C().
+		ImpersonateFirefoxWithOS(req.BrowserOSWindows),
+}
+
+for name, client := range clients {
+	resp, err := client.R().
+		SetHeader("Accept", "application/json").
+		Get(endpoint)
+	if err != nil {
+		log.Println(name, err)
+		continue
+	}
+	fmt.Println(name, resp.String())
+}
+```
+
+我在 `2026-06-03` 本机跑到的结果摘要：
+
+| 模式 | HTTP | User-Agent | JA4 | Peetprint Hash | HTTP/2 Akamai Hash |
+| --- | --- | --- | --- | --- | --- |
+| default | h2 | `req/v3 (https://github.com/jwwsjlm/req)` | `t13d1312h1_f57a46bbacb6_e5728521abd4` | `45373699620b7002e99c83b48eb8d1bf` | `d7b77e8c74a096366dd6190cbb2fa50a` |
+| Chrome Windows | h2 | `Mozilla/5.0 ... Chrome/133.0.0.0 ...` | `t13d1516h2_8daaf6152771_d8a2da3f94cd` | `1d4ffe9b0e34acac0bd883fa7f79d7b5` | `52d84b11737d980aef856699f885ca86` |
+| Firefox Windows | h2 | `Mozilla/5.0 ... Firefox/120.0` | `t13d1715h2_5b57614c22b0_5c2c66f702b0` | `b9c611f928c8c1f20c414a48c66abf27` | `6ea73faa8fc5aac76bded7bd238f6433` |
+
+结论：
+
+- `ImpersonateChromeWithOS` 和 `ImpersonateFirefoxWithOS` 会同时改变 `User-Agent`、TLS/JA4、Peetprint、HTTP/2 SETTINGS/顺序，也就是 HTTP 指纹伪装是生效的。
+- JA3 hash 可能因为 GREASE、session、uTLS 随机项在不同请求间变化，不要只看 JA3；建议一起看 JA4、Peetprint、HTTP/2 Akamai 和 headers。
+- `EnableForceHTTP3()` 访问这个 endpoint 时，本机测试不回退会 `timeout: no recent network activity`；开启 `EnableHTTP3FallbackOnError()` 后会稳定回退到 h2，并保留 Chrome-like H2/TLS 指纹。
+- 这不是“所有风控必过”的保证，只说明 req 发出的 TLS/HTTP/2/header 指纹已经能从默认 Go/req 指纹切换成浏览器 profile。
+
 ## 测试说明
 
 CI 会在 Linux 和 Windows 上跑 Go 1.24/1.25。自用时本地直接跑：
