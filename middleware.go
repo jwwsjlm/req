@@ -452,9 +452,19 @@ func handleDownload(c *Client, r *Response) (err error) {
 // generate URL
 func parseRequestURL(c *Client, r *Request) error {
 	tempURL := r.RawURL
+	if len(r.RawPathParams) > 0 {
+		for p, v := range r.RawPathParams {
+			tempURL = strings.Replace(tempURL, "{"+p+"}", v, -1)
+		}
+	}
 	if len(r.PathParams) > 0 {
 		for p, v := range r.PathParams {
 			tempURL = strings.Replace(tempURL, "{"+p+"}", url.PathEscape(v), -1)
+		}
+	}
+	if len(c.RawPathParams) > 0 {
+		for p, v := range c.RawPathParams {
+			tempURL = strings.Replace(tempURL, "{"+p+"}", v, -1)
 		}
 	}
 	if len(c.PathParams) > 0 {

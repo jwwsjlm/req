@@ -516,6 +516,95 @@ func TestSetBearerAuthToken(t *testing.T) {
 	tests.AssertEqual(t, "Bearer "+token, headers.Get("Authorization"))
 }
 
+func TestRequestRestyInspiredSetters(t *testing.T) {
+	r := tc().R().
+		SetHeaderAny("X-Number", 123).
+		SetHeaderValues("X-Multi", "a", "b").
+		SetHeaderMultiValues(map[string][]string{
+			"X-List": []string{"one", "two"},
+		}).
+		SetAuthSchemeToken("OAuth", "token").
+		SetQueryParamAny("page", 2).
+		SetPathParamAny("id", 42).
+		SetPathRawParamAny("raw", "groups/developers")
+
+	tests.AssertEqual(t, "123", r.Headers.Get("X-Number"))
+	tests.AssertEqual(t, []string{"a", "b"}, r.Headers[http.CanonicalHeaderKey("X-Multi")])
+	tests.AssertEqual(t, []string{"one", "two"}, r.Headers[http.CanonicalHeaderKey("X-List")])
+	tests.AssertEqual(t, "OAuth token", r.Headers.Get("Authorization"))
+	tests.AssertEqual(t, "2", r.QueryParams.Get("page"))
+	tests.AssertEqual(t, "42", r.PathParams["id"])
+	tests.AssertEqual(t, "groups/developers", r.RawPathParams["raw"])
+
+	headers := make(http.Header)
+	resp, err := tc().R().
+		SetAuthToken("goodtoken").
+		SetSuccessResult(&headers).
+		Get("/header")
+	assertSuccess(t, resp, err)
+	tests.AssertEqual(t, "Bearer goodtoken", headers.Get("Authorization"))
+}
+
+func TestPathRawParam(t *testing.T) {
+	c := tc()
+	var rawPath string
+	c.WrapRoundTripFunc(func(rt RoundTripper) RoundTripFunc {
+		return func(req *Request) (*Response, error) {
+			rawPath = req.URL.EscapedPath()
+			return &Response{
+				Request: req,
+				Response: &http.Response{
+					StatusCode: http.StatusOK,
+					Status:     "200 OK",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("ok")),
+				},
+			}, nil
+		}
+	})
+	resp, err := c.R().SetPathRawParam("path", "groups/developers").Get("/files/{path}")
+	assertSuccess(t, resp, err)
+	tests.AssertEqual(t, "/files/groups/developers", rawPath)
+
+	c = tc()
+	var escapedPath string
+	c.WrapRoundTripFunc(func(rt RoundTripper) RoundTripFunc {
+		return func(req *Request) (*Response, error) {
+			escapedPath = req.URL.EscapedPath()
+			return &Response{
+				Request: req,
+				Response: &http.Response{
+					StatusCode: http.StatusOK,
+					Status:     "200 OK",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("ok")),
+				},
+			}, nil
+		}
+	})
+	resp, err = c.R().SetPathParam("path", "groups/developers").Get("/files/{path}")
+	assertSuccess(t, resp, err)
+	tests.AssertEqual(t, "/files/groups%2Fdevelopers", escapedPath)
+}
+
+func TestSetContentLength(t *testing.T) {
+	var contentLength int64
+	c := tc().WrapRoundTripFunc(func(rt RoundTripper) RoundTripFunc {
+		return func(req *Request) (*Response, error) {
+			resp, err := rt.RoundTrip(req)
+			contentLength = req.RawRequest.ContentLength
+			return resp, err
+		}
+	})
+
+	resp, err := c.R().
+		SetBody(strings.NewReader("hello")).
+		SetContentLength(5).
+		Post("/echo")
+	assertSuccess(t, resp, err)
+	tests.AssertEqual(t, int64(5), contentLength)
+}
+
 func TestHeader(t *testing.T) {
 	testWithAllTransport(t, testHeader)
 }
@@ -909,6 +998,7 @@ func TestUploadMultipart(t *testing.T) {
 	resp, err := tc().R().
 		SetFile("file", tests.GetTestFilePath("sample-image.png")).
 		SetFiles(map[string]string{"file": tests.GetTestFilePath("sample-file.txt")}).
+		SetMultipartField("manifest", "manifest.json", "application/json", strings.NewReader(`{"ok":true}`)).
 		SetFormData(map[string]string{
 			"param1": "value1",
 			"param2": "value2",
@@ -918,6 +1008,8 @@ func TestUploadMultipart(t *testing.T) {
 	assertSuccess(t, resp, err)
 	tests.AssertContains(t, resp.String(), "sample-image.png", true)
 	tests.AssertContains(t, resp.String(), "sample-file.txt", true)
+	tests.AssertContains(t, resp.String(), "manifest.json", true)
+	tests.AssertContains(t, resp.String(), "application/json", true)
 	tests.AssertContains(t, resp.String(), "value1", true)
 	tests.AssertContains(t, resp.String(), "value2", true)
 }

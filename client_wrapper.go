@@ -58,6 +58,18 @@ func SetCommonFormData(data map[string]string) *Client {
 	return defaultClient.SetCommonFormData(data)
 }
 
+// SetCommonFormDataAnyType is a global wrapper methods which delegated
+// to the default client's Client.SetCommonFormDataAnyType.
+func SetCommonFormDataAnyType(data map[string]any) *Client {
+	return defaultClient.SetCommonFormDataAnyType(data)
+}
+
+// SetCommonFormDataAny is a global wrapper methods which delegated
+// to the default client's Client.SetCommonFormDataAny.
+func SetCommonFormDataAny(data map[string]any) *Client {
+	return defaultClient.SetCommonFormDataAny(data)
+}
+
 // SetMultipartBoundaryFunc is a global wrapper methods which delegated
 // to the default client's Client.SetMultipartBoundaryFunc.
 func SetMultipartBoundaryFunc(fn func() string) *Client {
@@ -172,16 +184,46 @@ func AddCommonQueryParams(key string, values ...string) *Client {
 	return defaultClient.AddCommonQueryParams(key, values...)
 }
 
+// SetCommonQueryParamAny is a global wrapper methods which delegated
+// to the default client's Client.SetCommonQueryParamAny.
+func SetCommonQueryParamAny(key string, value any) *Client {
+	return defaultClient.SetCommonQueryParamAny(key, value)
+}
+
 // SetCommonPathParam is a global wrapper methods which delegated
 // to the default client's Client.SetCommonPathParam.
 func SetCommonPathParam(key, value string) *Client {
 	return defaultClient.SetCommonPathParam(key, value)
 }
 
+// SetCommonPathParamAny is a global wrapper methods which delegated
+// to the default client's Client.SetCommonPathParamAny.
+func SetCommonPathParamAny(key string, value any) *Client {
+	return defaultClient.SetCommonPathParamAny(key, value)
+}
+
 // SetCommonPathParams is a global wrapper methods which delegated
 // to the default client's Client.SetCommonPathParams.
 func SetCommonPathParams(pathParams map[string]string) *Client {
 	return defaultClient.SetCommonPathParams(pathParams)
+}
+
+// SetCommonPathRawParam is a global wrapper methods which delegated
+// to the default client's Client.SetCommonPathRawParam.
+func SetCommonPathRawParam(key, value string) *Client {
+	return defaultClient.SetCommonPathRawParam(key, value)
+}
+
+// SetCommonPathRawParamAny is a global wrapper methods which delegated
+// to the default client's Client.SetCommonPathRawParamAny.
+func SetCommonPathRawParamAny(key string, value any) *Client {
+	return defaultClient.SetCommonPathRawParamAny(key, value)
+}
+
+// SetCommonPathRawParams is a global wrapper methods which delegated
+// to the default client's Client.SetCommonPathRawParams.
+func SetCommonPathRawParams(pathParams map[string]string) *Client {
+	return defaultClient.SetCommonPathRawParams(pathParams)
 }
 
 // SetCommonQueryParam is a global wrapper methods which delegated
@@ -406,6 +448,18 @@ func SetCommonBearerAuthToken(token string) *Client {
 	return defaultClient.SetCommonBearerAuthToken(token)
 }
 
+// SetCommonAuthToken is a global wrapper methods which delegated
+// to the default client's Client.SetCommonAuthToken.
+func SetCommonAuthToken(token string) *Client {
+	return defaultClient.SetCommonAuthToken(token)
+}
+
+// SetCommonAuthSchemeToken is a global wrapper methods which delegated
+// to the default client's Client.SetCommonAuthSchemeToken.
+func SetCommonAuthSchemeToken(scheme, token string) *Client {
+	return defaultClient.SetCommonAuthSchemeToken(scheme, token)
+}
+
 // SetCommonBasicAuth is a global wrapper methods which delegated
 // to the default client's Client.SetCommonBasicAuth.
 func SetCommonBasicAuth(username, password string) *Client {
@@ -422,6 +476,24 @@ func SetCommonDigestAuth(username, password string) *Client {
 // to the default client's Client.SetCommonHeaders.
 func SetCommonHeaders(hdrs map[string]string) *Client {
 	return defaultClient.SetCommonHeaders(hdrs)
+}
+
+// SetCommonHeaderAny is a global wrapper methods which delegated
+// to the default client's Client.SetCommonHeaderAny.
+func SetCommonHeaderAny(key string, value any) *Client {
+	return defaultClient.SetCommonHeaderAny(key, value)
+}
+
+// SetCommonHeaderValues is a global wrapper methods which delegated
+// to the default client's Client.SetCommonHeaderValues.
+func SetCommonHeaderValues(key string, values ...string) *Client {
+	return defaultClient.SetCommonHeaderValues(key, values...)
+}
+
+// SetCommonHeaderMultiValues is a global wrapper methods which delegated
+// to the default client's Client.SetCommonHeaderMultiValues.
+func SetCommonHeaderMultiValues(hdrs map[string][]string) *Client {
+	return defaultClient.SetCommonHeaderMultiValues(hdrs)
 }
 
 // SetCommonHeader is a global wrapper methods which delegated

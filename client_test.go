@@ -209,6 +209,52 @@ func TestSetCommonHeaders(t *testing.T) {
 	tests.AssertEqual(t, "value2", c.Headers.Get("header2"))
 }
 
+func TestRestyInspiredCommonSetters(t *testing.T) {
+	c := tc().
+		SetCommonHeaderAny("X-Number", 123).
+		SetCommonHeaderValues("X-Multi", "a", "b").
+		SetCommonHeaderMultiValues(map[string][]string{
+			"X-List": []string{"one", "two"},
+		}).
+		SetCommonQueryParamAny("page", 2).
+		SetCommonPathParamAny("id", 42).
+		SetCommonPathRawParam("path", "groups/developers").
+		SetCommonFormDataAnyType(map[string]any{
+			"enabled": true,
+			"count":   3,
+		}).
+		SetCommonAuthSchemeToken("OAuth", "token")
+
+	tests.AssertEqual(t, "123", c.Headers.Get("X-Number"))
+	tests.AssertEqual(t, []string{"a", "b"}, c.Headers[http.CanonicalHeaderKey("X-Multi")])
+	tests.AssertEqual(t, []string{"one", "two"}, c.Headers[http.CanonicalHeaderKey("X-List")])
+	tests.AssertEqual(t, "2", c.QueryParams.Get("page"))
+	tests.AssertEqual(t, "42", c.PathParams["id"])
+	tests.AssertEqual(t, "groups/developers", c.RawPathParams["path"])
+	tests.AssertEqual(t, "true", c.FormData.Get("enabled"))
+	tests.AssertEqual(t, "3", c.FormData.Get("count"))
+	tests.AssertEqual(t, "OAuth token", c.Headers.Get("Authorization"))
+
+	var gotPath string
+	c.WrapRoundTripFunc(func(rt RoundTripper) RoundTripFunc {
+		return func(req *Request) (*Response, error) {
+			gotPath = req.URL.Path
+			return &Response{
+				Request: req,
+				Response: &http.Response{
+					StatusCode: http.StatusOK,
+					Status:     "200 OK",
+					Header:     make(http.Header),
+					Body:       http.NoBody,
+				},
+			}, nil
+		}
+	})
+	resp, err := c.R().Get("/items/{id}/{path}")
+	assertSuccess(t, resp, err)
+	tests.AssertEqual(t, "/items/42/groups/developers", gotPath)
+}
+
 func TestSetCommonHeadersNonCanonical(t *testing.T) {
 	c := tc().SetCommonHeadersNonCanonical(map[string]string{
 		"my-Header": "my-value",
@@ -538,6 +584,7 @@ func TestClientClone(t *testing.T) {
 			Value: "test",
 		}).SetCommonQueryParam("test", "test").
 		SetCommonPathParam("test", "test").
+		SetCommonPathRawParam("raw", "a/b").
 		SetCommonRetryCount(2).
 		SetCommonFormData(map[string]string{"test": "test"}).
 		OnBeforeRequest(func(c *Client, r *Request) error { return nil })

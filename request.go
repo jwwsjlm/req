@@ -25,6 +25,7 @@ import (
 // override client level settings.
 type Request struct {
 	PathParams      map[string]string
+	RawPathParams   map[string]string
 	QueryParams     urlpkg.Values
 	FormData        urlpkg.Values
 	OrderedFormData []string
@@ -44,6 +45,8 @@ type Request struct {
 	URL *urlpkg.URL
 
 	isMultiPart              bool
+	contentLength            int64
+	contentLengthSet         bool
 	disableAutoReadResponse  bool
 	forceChunkedEncoding     bool
 	isSaveResponse           bool
@@ -222,6 +225,11 @@ func (r *Request) SetFormDataAnyType(data map[string]any) *Request {
 	return r
 }
 
+// SetFormDataAny is an alias of SetFormDataAnyType.
+func (r *Request) SetFormDataAny(data map[string]any) *Request {
+	return r.SetFormDataAnyType(data)
+}
+
 // SetCookies set http cookies for the request.
 func (r *Request) SetCookies(cookies ...*http.Cookie) *Request {
 	r.Cookies = append(r.Cookies, cookies...)
@@ -280,6 +288,22 @@ func (r *Request) SetFileReader(paramName, filename string, reader io.Reader) *R
 	r.SetFileUpload(FileUpload{
 		ParamName: paramName,
 		FileName:  filename,
+		GetFileContent: func() (io.ReadCloser, error) {
+			if rc, ok := reader.(io.ReadCloser); ok {
+				return rc, nil
+			}
+			return io.NopCloser(reader), nil
+		},
+	})
+	return r
+}
+
+// SetMultipartField sets up a multipart form part from a reader with an explicit Content-Type.
+func (r *Request) SetMultipartField(paramName, filename, contentType string, reader io.Reader) *Request {
+	r.SetFileUpload(FileUpload{
+		ParamName:   paramName,
+		FileName:    filename,
+		ContentType: contentType,
 		GetFileContent: func() (io.ReadCloser, error) {
 			if rc, ok := reader.(io.ReadCloser); ok {
 				return rc, nil
@@ -457,6 +481,27 @@ func (r *Request) SetBearerAuthToken(token string) *Request {
 	return r.SetHeader(header.Authorization, "Bearer "+token)
 }
 
+func authSchemeTokenValue(scheme, token string) string {
+	scheme = strings.TrimSpace(scheme)
+	if scheme == "" {
+		return token
+	}
+	if token == "" {
+		return scheme
+	}
+	return scheme + " " + token
+}
+
+// SetAuthToken sets the Authorization header using Bearer scheme.
+func (r *Request) SetAuthToken(token string) *Request {
+	return r.SetAuthSchemeToken("Bearer", token)
+}
+
+// SetAuthSchemeToken sets the Authorization header using a custom auth scheme.
+func (r *Request) SetAuthSchemeToken(scheme, token string) *Request {
+	return r.SetHeader(header.Authorization, authSchemeTokenValue(scheme, token))
+}
+
 // SetBasicAuth set basic auth for the request.
 func (r *Request) SetBasicAuth(username, password string) *Request {
 	return r.SetHeader(header.Authorization, util.BasicAuthHeaderValue(username, password))
@@ -499,6 +544,28 @@ func (r *Request) SetHeader(key, value string) *Request {
 		r.Headers = make(http.Header)
 	}
 	r.Headers.Set(key, value)
+	return r
+}
+
+// SetHeaderAny sets a header value converted from any type with fmt.Sprint.
+func (r *Request) SetHeaderAny(key string, value any) *Request {
+	return r.SetHeader(key, fmt.Sprint(value))
+}
+
+// SetHeaderValues sets multiple values for a header key.
+func (r *Request) SetHeaderValues(key string, values ...string) *Request {
+	if r.Headers == nil {
+		r.Headers = make(http.Header)
+	}
+	r.Headers[http.CanonicalHeaderKey(key)] = cloneSlice(values)
+	return r
+}
+
+// SetHeaderMultiValues sets multiple headers whose values may contain more than one entry.
+func (r *Request) SetHeaderMultiValues(headers map[string][]string) *Request {
+	for k, v := range headers {
+		r.SetHeaderValues(k, v...)
+	}
 	return r
 }
 
@@ -609,6 +676,11 @@ func (r *Request) SetQueryParam(key, value string) *Request {
 	return r
 }
 
+// SetQueryParamAny sets a query parameter value converted from any type with fmt.Sprint.
+func (r *Request) SetQueryParamAny(key string, value any) *Request {
+	return r.SetQueryParam(key, fmt.Sprint(value))
+}
+
 // AddQueryParam add a URL query parameter for the request.
 func (r *Request) AddQueryParam(key, value string) *Request {
 	if r.QueryParams == nil {
@@ -637,12 +709,39 @@ func (r *Request) SetPathParams(params map[string]string) *Request {
 	return r
 }
 
+// SetPathParamAny sets a path parameter value converted from any type with fmt.Sprint.
+func (r *Request) SetPathParamAny(key string, value any) *Request {
+	return r.SetPathParam(key, fmt.Sprint(value))
+}
+
 // SetPathParam set a URL path parameter for the request.
 func (r *Request) SetPathParam(key, value string) *Request {
 	if r.PathParams == nil {
 		r.PathParams = make(map[string]string)
 	}
 	r.PathParams[key] = value
+	return r
+}
+
+// SetPathRawParam sets a URL path parameter without url.PathEscape.
+func (r *Request) SetPathRawParam(key, value string) *Request {
+	if r.RawPathParams == nil {
+		r.RawPathParams = make(map[string]string)
+	}
+	r.RawPathParams[key] = value
+	return r
+}
+
+// SetPathRawParamAny sets a raw path parameter value converted from any type with fmt.Sprint.
+func (r *Request) SetPathRawParamAny(key string, value any) *Request {
+	return r.SetPathRawParam(key, fmt.Sprint(value))
+}
+
+// SetPathRawParams sets multiple URL path parameters without url.PathEscape.
+func (r *Request) SetPathRawParams(params map[string]string) *Request {
+	for key, value := range params {
+		r.SetPathRawParam(key, value)
+	}
 	return r
 }
 
@@ -977,6 +1076,13 @@ func (r *Request) SetBodyXmlMarshal(v any) *Request {
 // SetContentType set the `Content-Type` for the request.
 func (r *Request) SetContentType(contentType string) *Request {
 	return r.SetHeader(header.ContentType, contentType)
+}
+
+// SetContentLength overrides the request Content-Length.
+func (r *Request) SetContentLength(length int64) *Request {
+	r.contentLength = length
+	r.contentLengthSet = true
+	return r
 }
 
 // Context method returns the Context if its already set in request

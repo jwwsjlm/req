@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -48,6 +49,7 @@ var defaultClient = C()
 type Client struct {
 	BaseURL               string
 	PathParams            map[string]string
+	RawPathParams         map[string]string
 	QueryParams           urlpkg.Values
 	FormData              urlpkg.Values
 	DebugLog              bool
@@ -243,6 +245,22 @@ func (c *Client) SetCommonFormData(data map[string]string) *Client {
 		c.FormData.Set(k, v)
 	}
 	return c
+}
+
+// SetCommonFormDataAnyType sets form data from a map whose values can be any type.
+func (c *Client) SetCommonFormDataAnyType(data map[string]any) *Client {
+	if c.FormData == nil {
+		c.FormData = urlpkg.Values{}
+	}
+	for k, v := range data {
+		c.FormData.Set(k, fmt.Sprint(v))
+	}
+	return c
+}
+
+// SetCommonFormDataAny is an alias of SetCommonFormDataAnyType.
+func (c *Client) SetCommonFormDataAny(data map[string]any) *Client {
+	return c.SetCommonFormDataAnyType(data)
 }
 
 // SetMultipartBoundaryFunc overrides the default function used to generate
@@ -455,6 +473,11 @@ func (c *Client) AddCommonQueryParams(key string, values ...string) *Client {
 	return c
 }
 
+// SetCommonQueryParamAny sets a query parameter value converted from any type with fmt.Sprint.
+func (c *Client) SetCommonQueryParamAny(key string, value any) *Client {
+	return c.SetCommonQueryParam(key, fmt.Sprint(value))
+}
+
 func (c *Client) pathParams() map[string]string {
 	if c.PathParams == nil {
 		c.PathParams = make(map[string]string)
@@ -468,9 +491,41 @@ func (c *Client) SetCommonPathParam(key, value string) *Client {
 	return c
 }
 
+// SetCommonPathParamAny sets a path parameter value converted from any type with fmt.Sprint.
+func (c *Client) SetCommonPathParamAny(key string, value any) *Client {
+	return c.SetCommonPathParam(key, fmt.Sprint(value))
+}
+
 // SetCommonPathParams set path parameters for requests fired from the client.
 func (c *Client) SetCommonPathParams(pathParams map[string]string) *Client {
 	m := c.pathParams()
+	for k, v := range pathParams {
+		m[k] = v
+	}
+	return c
+}
+
+func (c *Client) rawPathParams() map[string]string {
+	if c.RawPathParams == nil {
+		c.RawPathParams = make(map[string]string)
+	}
+	return c.RawPathParams
+}
+
+// SetCommonPathRawParam sets a path parameter without url.PathEscape.
+func (c *Client) SetCommonPathRawParam(key, value string) *Client {
+	c.rawPathParams()[key] = value
+	return c
+}
+
+// SetCommonPathRawParamAny sets a raw path parameter value converted from any type with fmt.Sprint.
+func (c *Client) SetCommonPathRawParamAny(key string, value any) *Client {
+	return c.SetCommonPathRawParam(key, fmt.Sprint(value))
+}
+
+// SetCommonPathRawParams sets multiple path parameters without url.PathEscape.
+func (c *Client) SetCommonPathRawParams(pathParams map[string]string) *Client {
+	m := c.rawPathParams()
 	for k, v := range pathParams {
 		m[k] = v
 	}
@@ -854,6 +909,16 @@ func (c *Client) SetCommonBearerAuthToken(token string) *Client {
 	return c.SetCommonHeader(header.Authorization, "Bearer "+token)
 }
 
+// SetCommonAuthToken sets the Authorization header using Bearer scheme.
+func (c *Client) SetCommonAuthToken(token string) *Client {
+	return c.SetCommonAuthSchemeToken("Bearer", token)
+}
+
+// SetCommonAuthSchemeToken sets the Authorization header using a custom auth scheme.
+func (c *Client) SetCommonAuthSchemeToken(scheme, token string) *Client {
+	return c.SetCommonHeader(header.Authorization, authSchemeTokenValue(scheme, token))
+}
+
 // SetCommonBasicAuth set the basic auth for requests fired from
 // the client.
 func (c *Client) SetCommonBasicAuth(username, password string) *Client {
@@ -887,6 +952,28 @@ func (c *Client) SetCommonDigestAuth(username, password string) *Client {
 func (c *Client) SetCommonHeaders(hdrs map[string]string) *Client {
 	for k, v := range hdrs {
 		c.SetCommonHeader(k, v)
+	}
+	return c
+}
+
+// SetCommonHeaderAny sets a header value converted from any type with fmt.Sprint.
+func (c *Client) SetCommonHeaderAny(key string, value any) *Client {
+	return c.SetCommonHeader(key, fmt.Sprint(value))
+}
+
+// SetCommonHeaderValues sets multiple values for a common header key.
+func (c *Client) SetCommonHeaderValues(key string, values ...string) *Client {
+	if c.Headers == nil {
+		c.Headers = make(http.Header)
+	}
+	c.Headers[http.CanonicalHeaderKey(key)] = cloneSlice(values)
+	return c
+}
+
+// SetCommonHeaderMultiValues sets multiple common headers whose values may contain more than one entry.
+func (c *Client) SetCommonHeaderMultiValues(hdrs map[string][]string) *Client {
+	for k, v := range hdrs {
+		c.SetCommonHeaderValues(k, v...)
 	}
 	return c
 }
@@ -1690,6 +1777,7 @@ func (c *Client) Clone() *Client {
 
 	// clone other fields that may need to be cloned
 	cc.PathParams = cloneMap(c.PathParams)
+	cc.RawPathParams = cloneMap(c.RawPathParams)
 	cc.QueryParams = cloneUrlValues(c.QueryParams)
 	cc.FormData = cloneUrlValues(c.FormData)
 	cc.beforeRequest = cloneSlice(c.beforeRequest)
@@ -1878,6 +1966,9 @@ func (c *Client) roundTrip(r *Request) (resp *Response, err error) {
 
 	// setup header
 	contentLength := int64(len(r.Body))
+	if r.contentLengthSet {
+		contentLength = r.contentLength
+	}
 
 	var reqBody io.ReadCloser
 	if r.GetBody != nil {

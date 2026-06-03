@@ -16,6 +16,7 @@
 - 支持自定义 DNS resolver 和 DNS-over-TLS，HTTP/1.1、HTTP/2、HTTP/3 共用同一套解析策略。
 - 支持从响应中提取 TLS 版本、证书信息和 SHA-256 指纹。
 - 支持自定义 CookieJar factory，兼容 `func() http.CookieJar` 和旧的 `func() *cookiejar.Jar`。
+- 请求构造补强：Any 类型参数、多值 Header、Raw Path 参数、带 Content-Type 的 multipart field、显式 Content-Length。
 - 保留 req 原有的 debug、dump、retry、download、upload、middleware、自动 JSON/XML 等能力。
 
 ## 方法速查
@@ -23,9 +24,9 @@
 | 场景 | 常用方法 |
 | --- | --- |
 | 创建请求 | `C()`、`R()`、`Get()`、`Post()`、`Put()`、`Patch()`、`Delete()` |
-| URL 参数 | `SetBaseURL`、`SetScheme`、`SetQueryParam`、`SetQueryParamsFromStruct`、`SetQueryString`、`SetPathParam` |
-| Header/Cookie | `SetHeader`、`SetHeaders`、`SetCookies`、`SetCookieJarFactory` |
-| Body | `SetBody`、`SetBodyString`、`SetBodyJsonString`、`SetBodyJsonMarshal`、`SetBodyXmlMarshal`、`SetFormData`、`SetOrderedFormData` |
+| URL 参数 | `SetBaseURL`、`SetScheme`、`SetQueryParamAny`、`SetQueryParamsFromStruct`、`SetQueryString`、`SetPathRawParam` |
+| Header/Cookie | `SetHeaderAny`、`SetHeaderValues`、`SetHeaders`、`SetCookies`、`SetCookieJarFactory` |
+| Body | `SetBody`、`SetContentLength`、`SetBodyJsonMarshal`、`SetBodyXmlMarshal`、`SetFormData`、`SetOrderedFormData` |
 | 结果解析 | `SetSuccessResult`、`SetErrorResult`、`Into`、`UnmarshalJson`、`UnmarshalXml`、`ToString`、`ToBytes` |
 | 错误处理 | `SetCommonErrorResult`、`SetResultStateCheckFunc`、`OnError`、`OnAfterResponse` |
 | 重试 | `SetCommonRetryCount`、`SetCommonRetryBackoffInterval`、`SetRetryCount`、`SetRetryCondition` |
@@ -35,7 +36,7 @@
 | DNS | `SetDNSResolver`、`SetDNSOverTLSCloudflare`、`SetDNSOverTLS` |
 | HTTP/2 | `EnableForceHTTP2`、`SetHTTP2SettingsFrame`、`SetHTTP2InitialStreamID` |
 | HTTP/3 | `EnableHTTP3`、`EnableForceHTTP3`、`EnableHTTP3FallbackOnError`、`SetHTTP3QUICPerformanceProfile` |
-| 上传下载 | `SetFile`、`SetFiles`、`SetFileBytes`、`SetOutputFile`、`SetOutputDirectory`、`NewParallelDownload` |
+| 上传下载 | `SetFile`、`SetFiles`、`SetFileBytes`、`SetMultipartField`、`SetOutputFile`、`SetOutputDirectory`、`NewParallelDownload` |
 | 扩展集成 | `GetClient`、`GetTransport`、`Do`、`WrapRoundTripFunc`、`SetResponseBodyTransformer` |
 
 ## 安装
@@ -177,6 +178,23 @@ resp, err := client.R().
 	Get("/{version}/users/{id}")
 ```
 
+参数值不是字符串时，可以直接用 `Any` 版本：
+
+```go
+resp, err := client.R().
+	SetQueryParamAny("page", 2).
+	SetPathParamAny("id", 42).
+	Get("/v1/users/{id}")
+```
+
+默认 `SetPathParam` 会做 `url.PathEscape`。如果路径参数本身就包含 `/`，并且你希望保留它：
+
+```go
+resp, err := client.R().
+	SetPathRawParam("path", "groups/developers").
+	Get("/v1/files/{path}")
+```
+
 如果传入的是没有 scheme 的完整域名，可以给 client 设置默认 scheme：
 
 ```go
@@ -249,6 +267,15 @@ resp, err := client.R().
 	Get("https://api.example.com/me")
 ```
 
+Header 值不是字符串，或一个 Header 有多个值：
+
+```go
+resp, err := client.R().
+	SetHeaderAny("X-Retry", 2).
+	SetHeaderValues("Accept", "application/json", "application/problem+json").
+	Get("https://api.example.com/me")
+```
+
 Form 表单：
 
 ```go
@@ -279,6 +306,15 @@ resp, err := client.R().
 	SetContentType("text/plain").
 	SetBodyString("hello").
 	Post("https://httpbin.org/post")
+```
+
+需要手动指定 `Content-Length` 时：
+
+```go
+resp, err := client.R().
+	SetBody(strings.NewReader("hello")).
+	SetContentLength(5).
+	Post("https://api.example.com/raw")
 ```
 
 ## JSON 请求和响应
@@ -450,6 +486,22 @@ Bearer：
 ```go
 resp, err := client.R().
 	SetBearerAuthToken("token").
+	Get("https://api.example.com/me")
+```
+
+Bearer token 也可以用更短的写法：
+
+```go
+resp, err := client.R().
+	SetAuthToken("token").
+	Get("https://api.example.com/me")
+```
+
+自定义认证 scheme：
+
+```go
+resp, err := client.R().
+	SetAuthSchemeToken("OAuth", "token").
 	Get("https://api.example.com/me")
 ```
 
@@ -1165,6 +1217,19 @@ resp, err := req.C().R().
 	Post("https://httpbin.org/post")
 ```
 
+Reader 上传时指定单个 part 的 Content-Type：
+
+```go
+resp, err := req.C().R().
+	SetMultipartField(
+		"manifest",
+		"manifest.json",
+		"application/json",
+		strings.NewReader(`{"name":"demo"}`),
+	).
+	Post("https://httpbin.org/post")
+```
+
 上传进度：
 
 ```go
@@ -1429,6 +1494,7 @@ go test ./...
 
 - 感谢 [imroc/req](https://github.com/imroc/req)，这个库的基础能力来自原项目。
 - 感谢 [enetx/surf](https://github.com/enetx/surf)，HTTP/3 tuning、现代浏览器 profile、TLS impersonation 等思路给了很多参考。
+- 感谢 [go-resty/resty](https://github.com/go-resty/resty)，请求构造、multipart field、raw path 参数和易用 API 设计给了很多启发。
 
 ## License
 
