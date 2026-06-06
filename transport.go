@@ -812,12 +812,14 @@ func (t *Transport) Clone() *Transport {
 	if t.http3TLSClientConfig != nil {
 		tt.http3TLSClientConfig = t.http3TLSClientConfig.Clone()
 	}
+	t.pendingAltSvcsMu.Lock()
 	if len(t.http3AltSvcFails) > 0 {
 		tt.http3AltSvcFails = make(map[string]time.Time, len(t.http3AltSvcFails))
 		for addr, until := range t.http3AltSvcFails {
 			tt.http3AltSvcFails[addr] = until
 		}
 	}
+	t.pendingAltSvcsMu.Unlock()
 	if len(tt.httpRoundTripWrappers) > 0 { // clone transport middleware
 		fn := func(req *http.Request) (*http.Response, error) {
 			return tt.roundTrip(req)

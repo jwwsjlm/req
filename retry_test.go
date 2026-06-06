@@ -2,6 +2,7 @@ package req
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"math"
@@ -224,6 +225,51 @@ func TestRetryClosesPreviousResponseBody(t *testing.T) {
 	tests.AssertEqual(t, int32(2), atomic.LoadInt32(&attempts))
 	tests.AssertEqual(t, int32(1), atomic.LoadInt32(&retryBodyClosed))
 	tests.AssertEqual(t, int32(1), atomic.LoadInt32(&finalBodyClosed))
+}
+
+func TestRetryBackoffStopsWhenContextCancelled(t *testing.T) {
+	var attempts int32
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	c := C()
+	c.Transport.WrapRoundTripFunc(func(rt http.RoundTripper) HttpRoundTripFunc {
+		return func(req *http.Request) (*http.Response, error) {
+			atomic.AddInt32(&attempts, 1)
+			body := "retry body"
+			return &http.Response{
+				StatusCode:    http.StatusServiceUnavailable,
+				Status:        fmt.Sprintf("%d %s", http.StatusServiceUnavailable, http.StatusText(http.StatusServiceUnavailable)),
+				Header:        make(http.Header),
+				Body:          io.NopCloser(strings.NewReader(body)),
+				ContentLength: int64(len(body)),
+				Request:       req,
+			}, nil
+		}
+	})
+
+	start := time.Now()
+	resp, err := c.R().
+		SetContext(ctx).
+		SetRetryCount(3).
+		SetRetryFixedInterval(time.Second).
+		SetRetryCondition(func(resp *Response, err error) bool {
+			return resp.StatusCode == http.StatusServiceUnavailable
+		}).
+		SetRetryHook(func(resp *Response, err error) {
+			cancel()
+		}).
+		Get("http://example.com")
+	elapsed := time.Since(start)
+
+	tests.AssertNotNil(t, err)
+	tests.AssertErrorContains(t, err, "context canceled")
+	tests.AssertEqual(t, int32(1), atomic.LoadInt32(&attempts))
+	tests.AssertEqual(t, 1, resp.Request.RetryAttempt)
+	if elapsed >= 500*time.Millisecond {
+		t.Fatalf("retry backoff waited too long after context cancellation: %s", elapsed)
+	}
 }
 
 func TestRetryTurnedOffWhenRetryCountEqZero(t *testing.T) {

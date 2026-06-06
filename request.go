@@ -759,6 +759,22 @@ func closeRetryResponseBody(resp *Response) {
 	_ = resp.Body.Close()
 }
 
+func (r *Request) waitRetryInterval(interval time.Duration) error {
+	if interval <= 0 {
+		return r.Context().Err()
+	}
+
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+		return nil
+	case <-r.Context().Done():
+		return r.Context().Err()
+	}
+}
+
 // Do fires http request, 0 or 1 context is allowed, and returns the *Response which
 // is always not nil, and Response.Err is not nil if error occurs.
 func (r *Request) Do(ctx ...context.Context) *Response {
@@ -848,7 +864,9 @@ func (r *Request) do() (resp *Response, err error) {
 		}
 		retryInterval := r.retryOption.GetRetryInterval(resp, r.RetryAttempt)
 		closeRetryResponseBody(resp)
-		time.Sleep(retryInterval)
+		if err = r.waitRetryInterval(retryInterval); err != nil {
+			return
+		}
 
 		// clean up before retry
 		if r.dumpBuffer != nil {

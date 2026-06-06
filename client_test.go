@@ -15,6 +15,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1004,6 +1005,35 @@ func TestHTTP3AltSvcFallbackOnError(t *testing.T) {
 	resp, err = c.R().Get("/")
 	assertSuccess(t, resp, err)
 	tests.AssertEqual(t, 1, dialCount)
+}
+
+func TestCloneHTTP3AltSvcFailuresConcurrent(t *testing.T) {
+	c := C().
+		EnableHTTP3().
+		EnableHTTP3FallbackOnError().
+		SetHTTP3AltSvcFailureCooldown(time.Minute)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 1000; i++ {
+			addr := fmt.Sprintf("https://example-%d.com", i%16)
+			c.Transport.markHTTP3AltSvcFailure(addr)
+			_ = c.Transport.isHTTP3AltSvcCoolingDown(addr)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 1000; i++ {
+			clone := c.Clone()
+			_ = clone.Transport.isHTTP3AltSvcCoolingDown("https://example-1.com")
+		}
+	}()
+
+	wg.Wait()
 }
 
 func TestHTTP3QUICPerformanceProfile(t *testing.T) {
