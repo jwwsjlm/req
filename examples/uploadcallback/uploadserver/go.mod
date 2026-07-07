@@ -1,6 +1,6 @@
 module uploadserver
 
-go 1.18
+go 1.26.4
 
 require github.com/gin-gonic/gin v1.8.1
 
