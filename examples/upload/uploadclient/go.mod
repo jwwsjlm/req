@@ -4,7 +4,7 @@ go 1.26.4
 
 replace github.com/jwwsjlm/req/v3 => ../../../
 
-require github.com/jwwsjlm/req/v3 v3.0.0
+require github.com/jwwsjlm/req/v3 v3.58.3
 
 require (
 	github.com/Danny-Dasilva/CycleTLS/cycletls v1.0.30 // indirect
