@@ -796,6 +796,67 @@ func (r *Request) Do(ctx ...context.Context) *Response {
 	return resp
 }
 
+func (r *Request) shouldRetry(resp *Response, err error) bool {
+	if errors.Is(err, context.Canceled) || r.retryOption == nil ||
+		(r.RetryAttempt >= r.retryOption.MaxRetries && r.retryOption.MaxRetries >= 0) {
+		return false
+	}
+	needRetry := err != nil
+	if l := len(r.retryOption.RetryConditions); l > 0 {
+		for i := l - 1; i >= 0; i-- {
+			needRetry = r.retryOption.RetryConditions[i](resp, err)
+			if needRetry {
+				break
+			}
+		}
+	}
+	return needRetry
+}
+
+func (r *Request) prepareRetry(resp *Response, err error) error {
+	r.RetryAttempt++
+	if l := len(r.retryOption.RetryHooks); l > 0 {
+		for i := l - 1; i >= 0; i-- { // run retry hooks in reverse order
+			r.retryOption.RetryHooks[i](resp, err)
+		}
+	}
+	retryInterval := r.retryOption.GetRetryInterval(resp, r.RetryAttempt)
+	closeRetryResponseBody(resp)
+	if err = r.waitRetryInterval(retryInterval); err != nil {
+		return err
+	}
+
+	if r.dumpBuffer != nil {
+		r.dumpBuffer.Reset()
+	}
+	if r.trace != nil {
+		r.trace = &clientTrace{}
+	}
+	if resp != nil {
+		resp.body = nil
+		resp.result = nil
+		resp.error = nil
+	}
+	return nil
+}
+
+// tryRetry attempts retry after an error. It returns true if the request loop should continue.
+func (r *Request) tryRetry(resp **Response, err error) (bool, error) {
+	if *resp == nil {
+		*resp = &Response{Request: r}
+	}
+	if err != nil {
+		(*resp).Err = err
+	}
+	if !r.shouldRetry(*resp, err) {
+		return false, nil
+	}
+	if err = r.prepareRetry(*resp, err); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (r *Request) do() (resp *Response, err error) {
 	defer func() {
 		if resp == nil {
@@ -806,17 +867,30 @@ func (r *Request) do() (resp *Response, err error) {
 		}
 	}()
 
+retry:
 	for {
 		if r.Headers == nil {
 			r.Headers = make(http.Header)
 		}
 		for _, f := range r.client.udBeforeRequest {
 			if err = f(r.client, r); err != nil {
+				if ok, retryErr := r.tryRetry(&resp, err); retryErr != nil {
+					err = retryErr
+					return
+				} else if ok {
+					continue retry
+				}
 				return
 			}
 		}
 		for _, f := range r.client.beforeRequest {
 			if err = f(r.client, r); err != nil {
+				if ok, retryErr := r.tryRetry(&resp, err); retryErr != nil {
+					err = retryErr
+					return
+				} else if ok {
+					continue retry
+				}
 				return
 			}
 		}
@@ -837,47 +911,15 @@ func (r *Request) do() (resp *Response, err error) {
 			}
 		}
 
-		if contextCanceled || r.retryOption == nil || (r.RetryAttempt >= r.retryOption.MaxRetries && r.retryOption.MaxRetries >= 0) { // absolutely cannot retry.
+		if contextCanceled {
 			return
 		}
-
-		// check retry whether is needed.
-		needRetry := err != nil                             // default behaviour: retry if error occurs
-		if l := len(r.retryOption.RetryConditions); l > 0 { // override default behaviour if custom RetryConditions has been set.
-			for i := l - 1; i >= 0; i-- {
-				needRetry = r.retryOption.RetryConditions[i](resp, err)
-				if needRetry {
-					break
-				}
-			}
-		}
-		if !needRetry { // no retry is needed.
+		if ok, retryErr := r.tryRetry(&resp, err); retryErr != nil {
+			err = retryErr
+			return
+		} else if !ok {
 			return
 		}
-
-		// need retry, attempt to retry
-		r.RetryAttempt++
-		if l := len(r.retryOption.RetryHooks); l > 0 {
-			for i := l - 1; i >= 0; i-- { // run retry hooks in reverse order
-				r.retryOption.RetryHooks[i](resp, err)
-			}
-		}
-		retryInterval := r.retryOption.GetRetryInterval(resp, r.RetryAttempt)
-		closeRetryResponseBody(resp)
-		if err = r.waitRetryInterval(retryInterval); err != nil {
-			return
-		}
-
-		// clean up before retry
-		if r.dumpBuffer != nil {
-			r.dumpBuffer.Reset()
-		}
-		if r.trace != nil {
-			r.trace = &clientTrace{}
-		}
-		resp.body = nil
-		resp.result = nil
-		resp.error = nil
 	}
 }
 
