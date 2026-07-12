@@ -2008,6 +2008,10 @@ func (c *Client) roundTrip(r *Request) (resp *Response, err error) {
 			return
 		}
 	}
+	getBody := r.GetBody
+	if r.unReplayableBody != nil {
+		getBody = nil
+	}
 	req := &http.Request{
 		Method:        r.Method,
 		Header:        r.Headers.Clone(),
@@ -2018,7 +2022,7 @@ func (c *Client) roundTrip(r *Request) (resp *Response, err error) {
 		ProtoMinor:    1,
 		ContentLength: contentLength,
 		Body:          reqBody,
-		GetBody:       r.GetBody,
+		GetBody:       getBody,
 		Close:         r.close,
 	}
 	for _, cookie := range r.Cookies {

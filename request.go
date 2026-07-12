@@ -287,14 +287,16 @@ func (r *Request) SetQueryParamsFromStruct(v any) *Request {
 
 // SetFileReader set up a multipart form with a reader to upload file.
 func (r *Request) SetFileReader(paramName, filename string, reader io.Reader) *Request {
+	if rc, ok := reader.(io.ReadCloser); ok {
+		r.unReplayableBody = rc
+	} else {
+		r.unReplayableBody = io.NopCloser(reader)
+	}
 	r.SetFileUpload(FileUpload{
 		ParamName: paramName,
 		FileName:  filename,
 		GetFileContent: func() (io.ReadCloser, error) {
-			if rc, ok := reader.(io.ReadCloser); ok {
-				return rc, nil
-			}
-			return io.NopCloser(reader), nil
+			return r.unReplayableBody, nil
 		},
 	})
 	return r
@@ -319,8 +321,10 @@ func (r *Request) SetMultipartField(paramName, filename, contentType string, rea
 // SetFileBytes set up a multipart form with given []byte to upload.
 func (r *Request) SetFileBytes(paramName, filename string, content []byte) *Request {
 	r.SetFileUpload(FileUpload{
-		ParamName: paramName,
-		FileName:  filename,
+		ParamName:   paramName,
+		FileName:    filename,
+		FileSize:    int64(len(content)),
+		ContentType: http.DetectContentType(content),
 		GetFileContent: func() (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewReader(content)), nil
 		},
@@ -340,10 +344,25 @@ func (r *Request) SetFiles(files map[string]string) *Request {
 // SetFile set up a multipart form from file path to upload,
 // which read file from filePath automatically to upload.
 func (r *Request) SetFile(paramName, filePath string) *Request {
+	file, err := os.Open(filePath)
+	if err != nil {
+		r.client.log.Errorf("failed to open %s: %v", filePath, err)
+		r.appendError(err)
+		return r
+	}
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
+		file.Close()
 		r.client.log.Errorf("failed to stat file %s: %v", filePath, err)
 		r.appendError(err)
+		return r
+	}
+	cbuf := make([]byte, 512)
+	n, readErr := file.Read(cbuf)
+	file.Close()
+	if readErr != nil && readErr != io.EOF {
+		r.client.log.Errorf("failed to read %s: %v", filePath, readErr)
+		r.appendError(readErr)
 		return r
 	}
 	r.isMultiPart = true
@@ -353,7 +372,8 @@ func (r *Request) SetFile(paramName, filePath string) *Request {
 		GetFileContent: func() (io.ReadCloser, error) {
 			return os.Open(filePath)
 		},
-		FileSize: fileInfo.Size(),
+		FileSize:    fileInfo.Size(),
+		ContentType: http.DetectContentType(cbuf[:n]),
 	})
 }
 
