@@ -1210,3 +1210,47 @@ func TestImpersonateSwitchClearsChromeClientHints(t *testing.T) {
 	tests.AssertEqual(t, "", hdr.Get("Sec-Ch-Ua-Mobile"))
 	tests.AssertEqual(t, true, strings.Contains(hdr.Get("User-Agent"), "Firefox/120.0"))
 }
+func TestSetTLSFingerprintSpecFactoryConsecutiveHandshakes(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}
+	server1 := httptest.NewTLSServer(http.HandlerFunc(handler))
+	defer server1.Close()
+
+	c := tc().SetTLSFingerprintSpecFactory(func() *utls.ClientHelloSpec {
+		return &utls.ClientHelloSpec{
+			CipherSuites: []uint16{
+				utls.TLS_AES_128_GCM_SHA256,
+				utls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			},
+			CompressionMethods: []byte{0x00},
+			Extensions: []utls.TLSExtension{
+				&utls.SNIExtension{},
+				&utls.SupportedCurvesExtension{Curves: []utls.CurveID{
+					utls.X25519,
+					utls.CurveP256,
+				}},
+				&utls.SupportedPointsExtension{SupportedPoints: []byte{0x00}},
+				&utls.ALPNExtension{AlpnProtocols: []string{"h2", "http/1.1"}},
+				&utls.SignatureAlgorithmsExtension{SupportedSignatureAlgorithms: []utls.SignatureScheme{
+					utls.ECDSAWithP256AndSHA256,
+					utls.PSSWithSHA256,
+					utls.PKCS1WithSHA256,
+				}},
+				&utls.KeyShareExtension{KeyShares: []utls.KeyShare{
+					{Group: utls.X25519},
+				}},
+				&utls.SupportedVersionsExtension{Versions: []uint16{
+					utls.VersionTLS13,
+					utls.VersionTLS12,
+				}},
+			},
+		}
+	})
+	if _, err := c.R().Get("/"); err != nil {
+		t.Errorf("TestSetTLSFingerprintSpecFactory failed on first handshake: %v", err)
+	}
+	if _, err := c.R().Get(server1.URL); err != nil {
+		t.Errorf("TestSetTLSFingerprintSpecFactory failed on consecutive handshake to different host: %v", err)
+	}
+}

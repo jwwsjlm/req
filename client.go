@@ -1436,18 +1436,30 @@ func (c *Client) setTLSFingerprint(clientHelloID utls.ClientHelloID, uTLSConnApp
 }
 
 // SetTLSFingerprintSpec sets the TLS fingerprint from a custom ClientHelloSpec.
+// Deprecated: Prefer SetTLSFingerprintSpecFactory when the same client may
+// open multiple TLS connections. uTLS mutates ClientHelloSpec during
+// ApplyPreset, so reusing one spec can fail on consecutive handshakes.
 // Note this is valid for HTTP1 and HTTP2, not HTTP3.
 func (c *Client) SetTLSFingerprintSpec(clientHelloSpec *utls.ClientHelloSpec) *Client {
+	return c.SetTLSFingerprintSpecFactory(func() *utls.ClientHelloSpec {
+		return clientHelloSpec
+	})
+}
+
+// SetTLSFingerprintSpecFactory sets the TLS fingerprint from a factory that
+// returns a fresh custom ClientHelloSpec for every TLS handshake.
+// Note this is valid for HTTP1 and HTTP2, not HTTP3.
+func (c *Client) SetTLSFingerprintSpecFactory(fn func() *utls.ClientHelloSpec) *Client {
 	return c.setTLSFingerprint(utls.HelloCustom, func(conn *uTLSConn) error {
-		return conn.ApplyPreset(clientHelloSpec)
+		return conn.ApplyPreset(fn())
 	})
 }
 
 // SetTLSFingerprintJA3 sets the TLS fingerprint from a JA3 string.
 // Note this is valid for HTTP1 and HTTP2, not HTTP3.
 func (c *Client) SetTLSFingerprintJA3(ja3, userAgent string, forceHTTP1 bool) *Client {
-	clientHelloSpec, err := cycletls.StringToSpec(ja3, userAgent, forceHTTP1)
 	return c.setTLSFingerprint(utls.HelloCustom, func(conn *uTLSConn) error {
+		clientHelloSpec, err := cycletls.StringToSpec(ja3, userAgent, forceHTTP1)
 		if err != nil {
 			return err
 		}
