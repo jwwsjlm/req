@@ -18,7 +18,8 @@
 - 支持自定义 DNS resolver 和 DNS-over-TLS，HTTP/1.1、HTTP/2、HTTP/3 共用同一套解析策略。
 - 支持从响应中提取 TLS 版本、证书信息和 SHA-256 指纹。
 - 支持自定义 CookieJar factory，兼容 `func() http.CookieJar` 和旧的 `func() *cookiejar.Jar`。
-- 请求构造补强：Any 类型参数、多值 Header、Raw Path 参数、带 Content-Type 的 multipart field、显式 Content-Length。
+- 请求构造补强：Any 类型参数、多值 Header、Raw Path 参数、HTTP `QUERY`、流式 multipart、带 Content-Type 的 multipart field、显式 Content-Length。
+- 支持响应体大小上限、公开 retry 配置、自定义 hosts、SOCKS4/SOCKS4a 和跨域重定向敏感 Header 清理。
 - 保留 req 原有的 debug、dump、retry、download、upload、middleware、自动 JSON/XML 等能力。
 
 ## 相比原版的增强点
@@ -38,7 +39,7 @@
 | 场景 | 常用方法 |
 | --- | --- |
 | 创建 client/request | `C()`、`NewClient()`、`DefaultClient()`、`SetDefaultClient()`、`NewTransport()`、`T()`、`R()`、`NewRequest()`、`Clone()` |
-| HTTP 方法 | `Get()`、`Post()`、`Put()`、`Patch()`、`Delete()`、`Head()`、`Options()`、`Send()`、`Do()`、`MustGet()`、`MustPost()`、`MustPut()`、`MustPatch()`、`MustDelete()`、`MustOptions()`、`MustHead()`、`EnableAllowGetMethodPayload`、`DisableAllowGetMethodPayload` |
+| HTTP 方法 | `Get()`、`Post()`、`Put()`、`Patch()`、`Delete()`、`Head()`、`Options()`、`Query()`、`Send()`、`Do()`、`MustGet()`、`MustPost()`、`MustPut()`、`MustPatch()`、`MustDelete()`、`MustOptions()`、`MustHead()`、`MustQuery()`、`EnableAllowGetMethodPayload`、`DisableAllowGetMethodPayload` |
 | BaseURL/路径 | `SetBaseURL`、`SetScheme`、`SetURL`、`SetPathParam`、`SetPathParamAny`、`SetPathParams`、`SetPathRawParam`、`SetPathRawParamAny`、`SetPathRawParams` |
 | Query 参数 | `SetQueryParam`、`SetQueryParamAny`、`AddQueryParam`、`AddQueryParams`、`SetQueryParams`、`SetQueryParamsAnyType`、`SetQueryParamsFromValues`、`SetQueryParamsFromStruct`、`SetQueryString` |
 | Header | `SetHeader`、`SetHeaderAny`、`SetHeaderValues`、`SetHeaderMultiValues`、`SetHeaders`、`SetHeaderNonCanonical`、`SetHeadersNonCanonical`、`SetHeaderOrder`、`SetPseudoHeaderOrder` |
@@ -53,17 +54,17 @@
 | 结果解析 | `SetSuccessResult`、`SetErrorResult`、`SetResult`、`SetError`、`SuccessResult`、`ErrorResult`、`Result`、`Error`、`Into`、`Unmarshal`、`UnmarshalJson`、`UnmarshalXml`、`ToString`、`ToBytes` |
 | Response 读取 | `String`、`Bytes`、`Dump`、`GetStatus`、`GetStatusCode`、`GetContentType`、`GetHeader`、`GetHeaderValues`、`HeaderToString`、`IsSuccess`、`IsError`、`TLSInfo`、`TLSGrabber`、`TotalTime`、`ReceivedAt` |
 | 错误处理 | `SetCommonErrorResult`、`SetCommonError`、`SetResultStateCheckFunc`、`OnError`、`OnBeforeRequest`、`OnAfterResponse`、`IsSuccessState`、`IsErrorState`、`ResultState` |
-| 超时/context | `SetTimeout`、`SetContext`、`Context`、`SetContextData`、`GetContextData`、`SetClient`、`DisableAutoReadResponse`、`EnableAutoReadResponse`、`EnableCloseConnection` |
-| 重试 | `SetCommonRetryCount`、`SetCommonRetryInterval`、`SetCommonRetryFixedInterval`、`SetCommonRetryBackoffInterval`、`SetCommonRetryCondition`、`AddCommonRetryCondition`、`SetCommonRetryHook`、`AddCommonRetryHook`、`SetRetryCount`、`SetRetryInterval`、`SetRetryFixedInterval`、`SetRetryBackoffInterval`、`SetRetryCondition`、`AddRetryCondition`、`SetRetryHook`、`AddRetryHook` |
+| 超时/context/响应限制 | `SetTimeout`、`SetContext`、`Context`、`SetContextData`、`GetContextData`、`SetClient`、`SetMaxResponseSize`、`DisableAutoReadResponse`、`EnableAutoReadResponse`、`EnableCloseConnection` |
+| 重试 | `SetCommonRetryCount`、`SetCommonRetryInterval`、`SetCommonRetryFixedInterval`、`SetCommonRetryBackoffInterval`、`SetCommonRetryCondition`、`AddCommonRetryCondition`、`SetCommonRetryHook`、`AddCommonRetryHook`、`SetRetryCount`、`SetRetryInterval`、`SetRetryFixedInterval`、`SetRetryBackoffInterval`、`SetRetryCondition`、`AddRetryCondition`、`SetRetryHook`、`AddRetryHook`、`GetRetryOption` |
 | 调试 dump | `DevMode`、`SetDebug`、`EnableDebugLog`、`DisableDebugLog`、`EnableDumpAll`、`EnableDumpAllTo`、`EnableDumpAllToFile`、`EnableDumpAllAsync`、`EnableDumpEachRequest`、`EnableDumpEachRequestWithoutBody`、`EnableDump`、`EnableDumpTo`、`EnableDumpToFile`、`DisableDump`、`DisableDumpAll` |
 | Dump 细节 | `SetCommonDumpOptions`、`SetDumpOptions`、`EnableDumpAllWithoutBody`、`EnableDumpAllWithoutHeader`、`EnableDumpAllWithoutRequest`、`EnableDumpAllWithoutRequestBody`、`EnableDumpAllWithoutResponse`、`EnableDumpAllWithoutResponseBody`、`EnableDumpEachRequestWithoutHeader`、`EnableDumpEachRequestWithoutRequest`、`EnableDumpEachRequestWithoutRequestBody`、`EnableDumpEachRequestWithoutResponse`、`EnableDumpEachRequestWithoutResponseBody`、`EnableDumpWithoutBody`、`EnableDumpWithoutHeader`、`EnableDumpWithoutRequest`、`EnableDumpWithoutRequestBody`、`EnableDumpWithoutResponse`、`EnableDumpWithoutResponseBody` |
 | Trace | `EnableTraceAll`、`DisableTraceAll`、`EnableTrace`、`DisableTrace`、`TraceInfo`、`Blame` |
 | 浏览器伪装 | `ImpersonateChrome`、`ImpersonateChromeWithOS`、`ImpersonateChromeRandomOS`、`ImpersonateFirefox`、`ImpersonateFirefoxWithOS`、`ImpersonateFirefoxRandomOS`、`ImpersonateSafari`、`RandomBrowserOS` |
-| TLS 指纹 | `SetTLSFingerprint`、`SetTLSFingerprintJA3`、`SetTLSFingerprintSpec`、`SetTLSFingerprintChrome`、`SetTLSFingerprintFirefox`、`SetTLSFingerprintSafari`、`SetTLSFingerprintEdge`、`SetTLSFingerprintQQ`、`SetTLSFingerprint360`、`SetTLSFingerprintIOS`、`SetTLSFingerprintAndroid`、`SetTLSFingerprintRandomized` |
+| TLS 指纹 | `SetTLSFingerprint`、`SetTLSFingerprintJA3`、`SetTLSFingerprintSpec`、`SetTLSFingerprintSpecFactory`、`SetTLSFingerprintChrome`、`SetTLSFingerprintFirefox`、`SetTLSFingerprintSafari`、`SetTLSFingerprintEdge`、`SetTLSFingerprintQQ`、`SetTLSFingerprint360`、`SetTLSFingerprintIOS`、`SetTLSFingerprintAndroid`、`SetTLSFingerprintRandomized` |
 | TLS/证书 | `SetTLSClientConfig`、`GetTLSClientConfig`、`SetRootCertFromString`、`SetRootCertsFromFile`、`SetCertFromFile`、`SetCerts`、`EnableInsecureSkipVerify`、`DisableInsecureSkipVerify` |
-| DNS | `NewDNSOverTLSResolver`、`SetDNSResolver`、`SetDNSOverTLS`、`SetDNSOverTLSCloudflare`、`SetDNSOverTLSGoogle`、`SetDNSOverTLSQuad9`、`SetDNSOverTLSAdGuard`、`SetDNSOverTLSAli` |
+| DNS | `NewDNSOverTLSResolver`、`SetDNSResolver`、`SetResolver`、`SetHosts`、`SetDNSOverTLS`、`SetDNSOverTLSCloudflare`、`SetDNSOverTLSGoogle`、`SetDNSOverTLSQuad9`、`SetDNSOverTLSAdGuard`、`SetDNSOverTLSAli` |
 | 代理/dial | `SetProxyURL`、`SetProxy`、`SetProxyConnectHeader`、`SetGetProxyConnectHeader`、`SetUnixSocket`、`SetDial`、`SetDialTLS`、`SetTLSHandshake`、`SetTLSHandshakeTimeout` |
-| 重定向 | `SetRedirectPolicy`、`MaxRedirectPolicy`、`DefaultRedirectPolicy`、`NoRedirectPolicy`、`SameDomainRedirectPolicy`、`SameHostRedirectPolicy`、`AllowedHostRedirectPolicy`、`AllowedDomainRedirectPolicy`、`AlwaysCopyHeaderRedirectPolicy` |
+| 重定向 | `SetRedirectPolicy`、`MaxRedirectPolicy`、`DefaultRedirectPolicy`、`NoRedirectPolicy`、`SameDomainRedirectPolicy`、`SameHostRedirectPolicy`、`AllowedHostRedirectPolicy`、`AllowedDomainRedirectPolicy`、`AlwaysCopyHeaderRedirectPolicy`、`SensitiveHeadersRedirectPolicy` |
 | 压缩/解码 | `EnableAutoDecompress`、`DisableAutoDecompress`、`EnableCompression`、`DisableCompression`、`EnableAutoDecode`、`DisableAutoDecode`、`SetAutoDecodeContentType`、`SetAutoDecodeAllContentType`、`SetAutoDecodeContentTypeFunc`、`SetResponseBodyTransformer` |
 | HTTP 版本 | `EnableForceHTTP1`、`EnableForceHTTP2`、`EnableForceHTTP3`、`DisableForceHttpVersion`、`EnableH2C`、`DisableH2C`、`EnableHTTP3`、`DisableHTTP3`、`EnableHTTP3FallbackOnError` |
 | HTTP/2 细节 | `SetHTTP2SettingsFrame`、`SetHTTP2ConnectionFlow`、`SetHTTP2InitialStreamID`、`SetHTTP2HeaderPriority`、`SetHTTP2PriorityFrames`、`SetHTTP2MaxHeaderListSize`、`SetHTTP2ReadIdleTimeout`、`SetHTTP2PingTimeout`、`SetHTTP2WriteByteTimeout`、`SetHTTP2StrictMaxConcurrentStreams` |
@@ -597,9 +598,36 @@ resp, err := client.R().
 	Get("https://api.example.com/flaky")
 ```
 
+middleware 需要读取当前请求最终生效的重试配置时，可以使用 `GetRetryOption()`；没有配置重试时返回 `nil`：
+
+```go
+client.OnAfterResponse(func(c *req.Client, resp *req.Response) error {
+	if option := resp.Request.GetRetryOption(); option != nil {
+		log.Printf("retry count=%d", option.MaxRetries)
+	}
+	return nil
+})
+```
+
+## 响应体大小限制
+
+面对不可信接口或可能异常返回超大 body 的服务，可以设置字节上限，避免自动读取时无限占用内存和带宽：
+
+```go
+client := req.C().
+	SetMaxResponseSize(8 * 1024 * 1024) // 8 MiB
+
+// 单个请求可以覆盖 client 配置；0 表示禁用限制。
+resp, err := client.R().
+	SetMaxResponseSize(1024 * 1024).
+	Get("https://api.example.com/data")
+```
+
+已知 `Content-Length` 超限时会在读取前报错；chunked、压缩或未知长度响应会在流式读取达到上限时报错。限制针对 transport 解压后、应用实际读取到的字节。
+
 ## 代理和重定向
 
-HTTP/HTTPS/SOCKS5 代理：
+HTTP/HTTPS/SOCKS5/SOCKS4 代理：
 
 ```go
 client := req.C().
@@ -607,7 +635,16 @@ client := req.C().
 
 client = req.C().
 	SetProxyURL("socks5://127.0.0.1:1080")
+
+client = req.C().
+	SetProxyURL("socks4://127.0.0.1:1080")
+
+// 由代理端解析域名。
+client = req.C().
+	SetProxyURL("socks4a://127.0.0.1:1080")
 ```
+
+`socks4` 只支持 IPv4 目标并在本地解析域名；`socks4a` 会把域名交给代理解析。
 
 自定义代理逻辑：
 
@@ -636,6 +673,13 @@ client := req.C().
 ```go
 client := req.C().
 	SetRedirectPolicy(req.NoRedirectPolicy())
+```
+
+跨域重定向时删除自定义认证 Header，避免凭据泄漏；同域跳转会保留：
+
+```go
+client := req.C().
+	SetRedirectPolicy(req.SensitiveHeadersRedirectPolicy("X-API-Key", "X-Token"))
 ```
 
 ## Middleware
@@ -840,17 +884,20 @@ client := req.C().
 	SetTLSFingerprintJA3(ja3, ua, false)
 ```
 
-自定义 uTLS spec：
+自定义 uTLS spec。client 可能建立多条 TLS 连接时，必须让 factory 每次返回一个全新的 spec：
 
 ```go
-spec, err := utls.UTLSIdToSpec(utls.HelloChrome_Auto)
-if err != nil {
-	panic(err)
-}
-
 client := req.C().
-	SetTLSFingerprintSpec(&spec)
+	SetTLSFingerprintSpecFactory(func() *utls.ClientHelloSpec {
+		spec, err := utls.UTLSIdToSpec(utls.HelloChrome_Auto)
+		if err != nil {
+			panic(err)
+		}
+		return &spec
+	})
 ```
+
+旧的 `SetTLSFingerprintSpec` 仍保留兼容，但 uTLS 的 `ApplyPreset` 会修改传入 spec；同一个 client 连续连接不同域名时应改用 factory，避免重复握手失败。
 
 注意：`SetTLSFingerprint*`、JA3、自定义 uTLS 只作用于 HTTP/1.1 和 HTTP/2。HTTP/3 使用 quic-go 和 Go 的 `crypto/tls`，不能假装成 uTLS QUIC ClientHello。
 
@@ -1264,6 +1311,8 @@ resp, err := req.C().R().
 	Post("https://httpbin.org/post")
 ```
 
+multipart 文件现在默认以流式方式写入请求体，不会先把整个文件缓冲到内存。已知文件大小时会计算并发送 `Content-Length`；使用无法预知长度的 Reader 时会使用 chunked 传输。若服务端不接受 chunked，请提供可确定大小的文件/Reader，或按接口要求显式设置长度。
+
 上传进度：
 
 ```go
@@ -1373,6 +1422,18 @@ resolver := &net.Resolver{PreferGo: true}
 client := req.C().
 	SetDNSResolver(resolver)
 ```
+
+也可以使用与上游兼容的 `SetResolver`，或者用静态 hosts 映射让指定域名只连接到给定 IP：
+
+```go
+client := req.C().
+	SetResolver(&net.Resolver{PreferGo: true}).
+	SetHosts(map[string]string{
+		"api.example.com": "203.0.113.10",
+	})
+```
+
+`SetHosts` 是严格映射：未列出的域名会快速失败，并且不能与代理同时使用。传入的 map 会被复制，之后修改原 map 不会影响 client。
 
 ## TLS 信息
 
