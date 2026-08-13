@@ -6,13 +6,13 @@ require (
 	github.com/Danny-Dasilva/CycleTLS/cycletls v1.0.30
 	github.com/andybalholm/brotli v1.2.2
 	github.com/google/go-querystring v1.2.0
-	github.com/icholy/digest v1.1.0
-	github.com/klauspost/compress v1.19.0
+	github.com/icholy/digest v1.2.0
+	github.com/klauspost/compress v1.19.2
 	github.com/quic-go/qpack v0.6.0
-	github.com/quic-go/quic-go v0.60.0
+	github.com/quic-go/quic-go v0.61.0
 	github.com/refraction-networking/utls v1.8.2
-	golang.org/x/net v0.56.0
-	golang.org/x/text v0.39.0
+	golang.org/x/net v0.58.0
+	golang.org/x/text v0.41.0
 )
 
 require (
@@ -28,11 +28,11 @@ require (
 	github.com/onsi/gomega v1.41.0 // indirect
 	github.com/refraction-networking/uquic v0.0.6 // indirect
 	go.uber.org/mock v0.6.0 // indirect
-	golang.org/x/crypto v0.53.0 // indirect
+	golang.org/x/crypto v0.55.0 // indirect
 	golang.org/x/exp v0.0.0-20260611194520-c48552f49976 // indirect
-	golang.org/x/mod v0.37.0 // indirect
-	golang.org/x/sync v0.21.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/tools v0.47.0 // indirect
+	golang.org/x/mod v0.38.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/tools v0.48.0 // indirect
 	h12.io/socks v1.0.3 // indirect
 )
