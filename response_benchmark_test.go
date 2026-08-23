@@ -11,7 +11,7 @@ import (
 var benchmarkResponseBody []byte
 
 func BenchmarkResponseToBytes(b *testing.B) {
-	for _, size := range []int{1024, 64 * 1024} {
+	for _, size := range []int{1024, 8 * 1024, 64 * 1024} {
 		payload := bytes.Repeat([]byte("x"), size)
 		b.Run(byteSizeName(size), func(b *testing.B) {
 			request := C().R()

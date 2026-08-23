@@ -594,6 +594,10 @@ func parseRequestURL(c *Client, r *Request) error {
 	return nil
 }
 
+// encodeQueryParams merges client and request parameters without mutating
+// either input. Request-level values replace client-level values by key.
+//
+// encodeQueryParams 不修改输入；请求级同名参数按 key 覆盖 client 参数。
 func encodeQueryParams(clientParams, requestParams url.Values) string {
 	if len(clientParams) == 0 {
 		return requestParams.Encode()
@@ -603,9 +607,16 @@ func encodeQueryParams(clientParams, requestParams url.Values) string {
 	}
 
 	// Request-level values replace client-level values by key. url.Values.Encode
-	// only reads the map and slices, so sharing the existing value slices avoids
-	// copying every string on every request.
-	query := make(url.Values, len(clientParams)+len(requestParams))
+	// only reads the map and value slices, so a shallow merge avoids copying every
+	// string without mutating either input. Encode still provides the standard
+	// library's deterministic, key-sorted output.
+	//
+	// 请求级参数按 key 覆盖 client 参数。浅合并只共享只读切片，不修改两侧输入；
+	// 最终仍交给标准库 url.Values.Encode，保持稳定的按 key 排序编码结果。
+	// The union contains at least as many keys as the larger input, so this hint
+	// cannot over-allocate merely because the two maps contain the same keys.
+	// 合并后的 key 数不会少于较大一侧；该提示不会因两侧大量重名而过度预分配。
+	query := make(url.Values, max(len(clientParams), len(requestParams)))
 	for key, values := range clientParams {
 		query[key] = values
 	}

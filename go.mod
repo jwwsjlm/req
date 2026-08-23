@@ -1,6 +1,6 @@
 module github.com/jwwsjlm/req/v3
 
-go 1.26.4
+go 1.26.7
 
 require (
 	github.com/Danny-Dasilva/CycleTLS/cycletls v1.0.30

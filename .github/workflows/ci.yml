@@ -20,7 +20,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: ['1.24.x', '1.25.x']
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
@@ -29,7 +28,7 @@ jobs:
     - name: Setup Go
       uses: actions/setup-go@v5
       with:
-        go-version: ${{ matrix.go }}
+        go-version: '1.26.7'
         cache: true
     - name: Test
       run: go test ./... -coverprofile=coverage.txt

@@ -73,6 +73,29 @@ func TestSortKeyValuesPreservesOrderingBehavior(t *testing.T) {
 			order: []string{"accept", "cookie", "ACCEPT", "user-agent"},
 		},
 		{
+			name: "invalid unicode and pseudo headers",
+			kvs: []KeyValues{
+				{Key: "bad key"},
+				{Key: "BAD KEY"},
+				{Key: "s"},
+				{Key: "ſ"},
+				{Key: "K"},
+				{Key: "K"},
+				{Key: ":method"},
+				{Key: ":METHOD"},
+			},
+			order: []string{"BAD KEY", "ſ", "K", ":METHOD", "bad key", ":method"},
+		},
+		{
+			name: "duplicate invalid ordered keys use last rank",
+			kvs: []KeyValues{
+				{Key: "bad key"},
+				{Key: "BAD KEY"},
+				{Key: "Accept"},
+			},
+			order: []string{"bad key", "Accept", "bad key"},
+		},
+		{
 			name:  "empty order",
 			kvs:   []KeyValues{{Key: "B"}, {Key: "A"}},
 			order: nil,
@@ -98,6 +121,7 @@ func TestSortKeyValuesMatchesLegacyAcrossHeaderCases(t *testing.T) {
 		"Cache-Control", "Content-Length", "Content-Type", "Cookie", "Host",
 		"Origin", "Priority", "Referer", "Sec-Fetch-Dest", "Sec-Fetch-Mode",
 		"Sec-Fetch-Site", "User-Agent", "X-API-Key", "X-Request-ID",
+		"bad key", "BAD KEY", "s", "ſ", "K", "K", ":method", ":METHOD",
 	}
 	rng := rand.New(rand.NewSource(1))
 
@@ -125,7 +149,7 @@ func TestSortKeyValuesMatchesLegacyAcrossHeaderCases(t *testing.T) {
 	}
 }
 
-func TestSortKeyValuesMapPathMatchesLegacy(t *testing.T) {
+func TestSortKeyValuesLargeInputMatchesLegacy(t *testing.T) {
 	const count = 48
 	kvs := make([]KeyValues, count)
 	order := make([]string, count)
@@ -140,6 +164,26 @@ func TestSortKeyValuesMapPathMatchesLegacy(t *testing.T) {
 	legacySort(want, order)
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("SortKeyValues() = %#v, want legacy ordering %#v", got, want)
+	}
+}
+
+func TestCanonicalHeaderKeyEqualMatchesTextproto(t *testing.T) {
+	values := []string{
+		"", "Accept", "accept", "ACCEPT", "x-custom-header", "X-Custom-Header",
+		"bad key", "BAD KEY", ":method", ":METHOD", "s", "ſ", "K", "K",
+	}
+	for value := 0; value <= 255; value++ {
+		values = append(values, string([]byte{byte(value)}))
+	}
+
+	for _, a := range values {
+		for _, b := range values {
+			got := canonicalHeaderKeyEqual(a, b)
+			want := textproto.CanonicalMIMEHeaderKey(a) == textproto.CanonicalMIMEHeaderKey(b)
+			if got != want {
+				t.Fatalf("canonicalHeaderKeyEqual(%q, %q) = %v, want %v", a, b, got, want)
+			}
+		}
 	}
 }
 

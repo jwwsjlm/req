@@ -6,6 +6,8 @@
 
 第一次接触 Go 或第一次用这个库，建议先看：[示例.md](示例.md)。那份文档从 `go mod init`、`go get`、第一个 `GET` 请求开始，一直写到 JSON、表单、Cookie、上传下载、代理、重试、浏览器伪装、HTTP/3 和常见报错。
 
+按主题查阅和生产实践请看 [中文 Wiki](docs/Home.md)；仓库内可离线编译验证的示例见 [docs/examples](docs/examples/README.md)。
+
 ## 主要能力
 
 - 简洁链式 API，保留 `req.C().R().Get(...)` 这种写法。
@@ -33,6 +35,47 @@
 - **请求构造更适合日常业务**：增加 Any 类型参数、多值 Header、raw path 参数、`SetQueryParamsFromStruct`、带 Content-Type 的 multipart field、显式 `Content-Length`、自定义 CookieJar factory 等补充方法。
 - **资源释放和高并发更稳**：对 dump、trace、retry、multipart 上传、parallel download 做了并发和资源释放加固，重点处理 response body、文件句柄、临时目录、goroutine/channel 退出这些长期运行时容易踩的坑。
 - **中文新手文档更完整**：README 和 [示例.md](示例.md) 都使用 `github.com/jwwsjlm/req/v3`，并覆盖从 `go mod init` 到完整业务 client 封装的用法。
+
+## 本次更新：兼容性优先的热路径优化
+
+本次更新不改变公开 API，重点减少请求与响应热路径中的重复分配，同时把异常输入和不可信远端数据的资源上限放在首位：
+
+- **Query 合并**：client 与 request 参数改为浅层 map 合并；request 同名 key 仍覆盖 client，key 仍区分大小写，输入 map 和 value slice 不被修改，最终继续由标准库 `url.Values.Encode` 按 key 排序编码。
+- **Header 排序**：排序前一次性计算 rank。常见小列表使用与 `textproto.CanonicalMIMEHeaderKey` 等价的无分配匹配，大列表直接调用该标准库函数；合法字段、非法字段、Unicode、伪 Header、重复排序键以及 HTTP/1.1、HTTP/2、HTTP/3 的原有语义均保持不变。
+- **响应读取**：仅对已知长度且不超过 8 KiB 的小响应做有限预分配；`Content-Length` 只是容量提示，从不作为读取边界。短报、长报、未知长度和大响应仍读取到 EOF，HEAD/`http.NoBody` 不使用声明长度，读取错误继续连同已读数据返回。
+- **资源边界**：Header map 和 Query map 的容量提示都按实际可用上界限制，避免大量重复 key 造成不必要的大块提前分配。
+- **工具链**：`go.mod` 与 Linux/Windows CI 统一使用 Go `1.26.7`。
+
+兼容性测试会把优化实现与 `v3.61.1` 的旧行为逐项对照，并覆盖随机大小写、非法与 Unicode Header、Query 输入不变性、8 KiB 响应边界、错误注入和 HEAD 响应。性能数据见下方最终同机基准；不同 CPU、系统和 Go 版本下应关注相对变化，而不是绝对耗时。
+
+### 同机基准（2026-08-23）
+
+环境：Windows/amd64、Go `1.26.7`、Intel Core i5-14600KF；基线为 `af48c83`（`v3.61.1`），每项运行 10 次，下表使用中位数。百分比是本机描述性结果，不代表所有环境都能得到相同幅度。
+
+| 场景 | ns/op：基线 → 当前 | B/op：基线 → 当前 | allocs/op：基线 → 当前 |
+| --- | ---: | ---: | ---: |
+| 仅 client Query | 1,376 → 927（-32.6%） | 1,344 → 1,216（-9.5%） | 21 → 13（-38.1%） |
+| client + request Query | 2,177 → 1,718（-21.1%） | 2,264 → 1,992（-12.0%） | 29 → 16（-44.8%） |
+| 常规小写 Header 顺序 | 10,541 → 1,467（-86.1%） | 3,520 → 224（-93.6%） | 133 → 2（-98.5%） |
+| 常规规范化 Header 顺序 | 5,648 → 1,654（-70.7%） | 1,808 → 224（-87.6%） | 16 → 2（-87.5%） |
+| 128 项 Header 顺序 | 33,308 → 14,833（-55.5%） | 20,040 → 11,736（-41.4%） | 420 → 261（-37.9%） |
+| 1 KiB 响应读取 | 1,045 → 673（-35.6%） | 2,496 → 1,856（-25.6%） | 8 → 5（-37.5%） |
+| 8 KiB 响应读取 | 5,627 → 2,260（-59.9%） | 17,856 → 9,792（-45.2%） | 14 → 5（-64.3%） |
+| 64 KiB 响应读取 | 不作为本次优化结论 | 138,432 → 138,432（不变） | 20 → 20（不变） |
+
+64 KiB 场景有意不使用长度预分配，继续走 `io.ReadAll`；其内存与分配次数没有变化。两批非随机交错样本虽观测到耗时差异，但无法归因于本次实现，因此不作为优化收益。复现命令与稳定性验证见 [性能与稳定性](docs/12-performance-stability.md)。
+
+## 文档导航
+
+| 主题 | 文档 |
+| --- | --- |
+| 首页与推荐阅读顺序 | [中文 Wiki 首页](docs/Home.md) |
+| 快速入门与核心对象 | [快速入门](docs/01-getting-started.md)、[Client / Request / Response](docs/02-client-request-response.md) |
+| 请求、响应、认证和可靠性 | [构建请求](docs/03-building-requests.md)、[错误处理](docs/04-error-handling.md)、[认证与 Cookie](docs/05-auth-cookie.md)、[超时、重试与 Context](docs/06-timeout-retry-context.md) |
+| 网络、上传下载与可观测性 | [代理、DNS 与重定向](docs/07-proxy-dns-redirect.md)、[上传与下载](docs/08-upload-download.md)、[中间件与可观测性](docs/09-middleware-observability.md) |
+| 浏览器、TLS、HTTP/2 与 HTTP/3 | [浏览器与 TLS 指纹](docs/10-browser-tls-fingerprint.md)、[HTTP/2 与 HTTP/3](docs/11-http2-http3.md) |
+| 性能、配方、迁移与 API | [性能与稳定性](docs/12-performance-stability.md)、[生产配方](docs/13-recipes.md)、[迁移与兼容](docs/14-migration-compatibility.md)、[API 索引](docs/15-api-index.md) |
+| 可编译示例 | [docs/examples](docs/examples/README.md) |
 
 ## 方法速查
 
@@ -78,7 +121,7 @@
 go get github.com/jwwsjlm/req/v3
 ```
 
-要求 Go `1.24+`。
+要求 Go `1.26.7` 或更高版本；准确要求以 [go.mod](go.mod) 为准。
 
 如果你还不熟 Go module、`main.go`、`go run` 这些基础步骤，先按 [示例.md](示例.md) 跑一遍最小项目。
 
@@ -90,9 +133,7 @@ go get github.com/jwwsjlm/req/v3
 var apiClient = req.C().
 	SetTimeout(30 * time.Second).
 	SetCommonHeader("Accept", "application/json").
-	SetCommonHeader("Accept-Language", "zh-CN,zh;q=0.9").
-	SetCommonRetryCount(2).
-	SetCommonRetryBackoffInterval(300*time.Millisecond, 3*time.Second)
+	SetCommonHeader("Accept-Language", "zh-CN,zh;q=0.9")
 ```
 
 偏浏览器访问、反爬压测、站点抓取时用浏览器 profile：
@@ -103,8 +144,7 @@ var browserClient = req.C().
 	SetDNSOverTLSCloudflare().
 	EnableHTTP3().
 	EnableHTTP3FallbackOnError().
-	SetHTTP3AltSvcFailureCooldown(30 * time.Second).
-	SetCommonRetryCount(2)
+	SetHTTP3AltSvcFailureCooldown(30 * time.Second)
 ```
 
 只想稳定优先，不想强制 HTTP/3：
@@ -113,9 +153,10 @@ var browserClient = req.C().
 var stableClient = req.C().
 	SetTimeout(20 * time.Second).
 	EnableHTTP3().
-	EnableHTTP3FallbackOnError().
-	SetCommonRetryCount(2)
+	EnableHTTP3FallbackOnError()
 ```
+
+重试优先在明确的只读/幂等 request 上配置。公共 `SetCommonRetry*` 会作用于这个 client 的所有方法；除非 condition 显式检查请求方法，或业务使用幂等键/去重，否则不要让它自动重试 POST/PATCH 等写请求。
 
 调试时再开 dump，不建议生产默认全量 dump：
 
@@ -575,19 +616,23 @@ resp, err := client.R().
 	Get("https://api.example.com/slow")
 ```
 
-推荐重试配置：
+推荐把重试限制在明确的只读请求：
 
 ```go
-client := req.C().
-	SetCommonRetryCount(2).
-	SetCommonRetryBackoffInterval(300*time.Millisecond, 3*time.Second).
-	SetCommonRetryCondition(func(resp *req.Response, err error) bool {
+resp, err := client.R().
+	SetRetryCount(2).
+	SetRetryBackoffInterval(300*time.Millisecond, 3*time.Second).
+	SetRetryCondition(func(resp *req.Response, err error) bool {
 		if err != nil {
-			return true
+			return !errors.Is(err, context.Canceled) &&
+				!errors.Is(err, context.DeadlineExceeded)
 		}
-		return resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
-	})
+		return resp != nil && (resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500)
+	}).
+	Get("https://api.example.com/flaky")
 ```
+
+专用于 GET/HEAD/OPTIONS/QUERY 的 client 可以使用 `SetCommonRetry*`；通用 client 的公共 condition 应先检查 `resp.Request.Method`。POST/PATCH 等写请求只有在业务提供幂等键、去重或等价保证时才配置重试。
 
 单个请求覆盖重试：
 
@@ -664,7 +709,7 @@ client := req.C().
 client := req.C().
 	SetRedirectPolicy(
 		req.MaxRedirectPolicy(5),
-		req.SameDomainRedirectPolicy(),
+		req.AllowedHostRedirectPolicy("api.example.com", "login.example.com"),
 	)
 ```
 
@@ -679,8 +724,13 @@ client := req.C().
 
 ```go
 client := req.C().
-	SetRedirectPolicy(req.SensitiveHeadersRedirectPolicy("X-API-Key", "X-Token"))
+	SetRedirectPolicy(
+		req.AllowedHostRedirectPolicy("api.example.com", "login.example.com"),
+		req.SensitiveHeadersRedirectPolicy("X-API-Key", "X-Token"),
+	)
 ```
+
+`SameDomainRedirectPolicy`、`AllowedDomainRedirectPolicy` 和 `SensitiveHeadersRedirectPolicy` 使用简单标签裁剪，不是 Public Suffix List/eTLD+1 判断；例如 `foo.co.uk` 与 `bar.co.uk` 可能被视为同域。高价值凭据应以明确的 `AllowedHostRedirectPolicy` 为主要边界；若还需约束 scheme、端口或完整 origin，请实现自定义策略。
 
 ## Middleware
 
@@ -756,7 +806,7 @@ resp, err := client.R().
 	Get("https://example.com")
 ```
 
-注意：当前 HTTP/3 不支持 `TraceInfo`，排查 H3 建议同时打开 dump、debug log 或回退到 H2 对照。
+HTTP/3 会提供连接、TLS、复用和首字节等核心 `TraceInfo`，但 DNS 与历史命名的 `TCPConnectTime` 字段可能为零或不代表真实 TCP。排查 H3 时应结合 dump/debug log，并与 H2 对照。
 
 ## 标准库兼容和扩展点
 
@@ -1389,11 +1439,11 @@ func NewHTTPClient() *req.Client {
 		SetDNSOverTLSCloudflare().
 		EnableHTTP3().
 		EnableHTTP3FallbackOnError().
-		SetHTTP3AltSvcFailureCooldown(30 * time.Second).
-		SetCommonRetryCount(2).
-		EnableDumpEachRequest()
+		SetHTTP3AltSvcFailureCooldown(30 * time.Second)
 }
 ```
+
+重试按具体请求的幂等性配置；dump/debug 也按需临时开启，避免生产默认记录凭据和大 body。
 
 ## DNS-over-TLS 和自定义 Resolver
 
@@ -1579,7 +1629,7 @@ for name, client := range clients {
 
 ## 测试说明
 
-CI 会在 Linux 和 Windows 上跑 Go 1.24/1.25。自用时本地直接跑：
+CI 会在 Linux 和 Windows 上使用 Go `1.26.7`。自用时本地直接跑：
 
 ```sh
 go test ./...

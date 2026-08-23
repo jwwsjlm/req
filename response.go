@@ -13,10 +13,14 @@ import (
 	"github.com/jwwsjlm/req/v3/internal/util"
 )
 
-// Keep the hint deliberately modest because Content-Length is controlled by
-// the peer and may be inaccurate. This covers typical API responses without
-// allowing a tiny body to trigger a large eager allocation.
-const maxResponseBodyPreallocateSize = 64 << 10
+// maxResponseBodyPreallocateSize caps how much memory a peer-controlled
+// Content-Length can make us allocate before the first read. The hint is only
+// used for small, common API responses; larger and unknown bodies keep using
+// io.ReadAll's adaptive growth strategy.
+//
+// 该上限限制不可信 Content-Length 触发的预分配量。仅对常见小响应使用长度提示，
+// 大响应和未知长度响应继续使用 io.ReadAll 的自适应扩容，稳定性优先。
+const maxResponseBodyPreallocateSize = 8 << 10
 
 // ErrResponseBodyTooLarge is returned when a response body exceeds the limit
 // configured via Client.SetMaxResponseSize or Request.SetMaxResponseSize.
@@ -328,7 +332,17 @@ func (r *Response) ToBytes() (body []byte, err error) {
 		}
 		r.body = body
 	}()
-	body, err = readResponseBody(r.Body, r.ContentLength)
+	contentLength := r.ContentLength
+	if r.Body == http.NoBody || r.Request != nil && r.Request.Method == http.MethodHead {
+		// A HEAD response may advertise the resource size while carrying no body.
+		// Keep reading through the normal path so transformers still run, but do
+		// not use that advertised size as an allocation hint.
+		//
+		// HEAD 可保留资源大小却不携带响应体。仍走正常读取流程以执行转换器，
+		// 但不把该声明长度用于预分配。
+		contentLength = -1
+	}
+	body, err = readResponseBody(r.Body, contentLength)
 	r.setReceivedAt()
 	if err == nil && r.Request.client.responseBodyTransformer != nil {
 		body, err = r.Request.client.responseBodyTransformer(body, r.Request, r)
@@ -336,14 +350,21 @@ func (r *Response) ToBytes() (body []byte, err error) {
 	return
 }
 
+// readResponseBody reads body to EOF. A small positive contentLength is used
+// only as a bounded capacity hint, never as a read limit.
+//
+// readResponseBody 始终读取到 EOF；较小的正 Content-Length 仅作为有上限的容量提示。
 func readResponseBody(body io.Reader, contentLength int64) ([]byte, error) {
 	if contentLength <= 0 || contentLength > maxResponseBodyPreallocateSize {
 		return io.ReadAll(body)
 	}
 
-	// bytes.Buffer.ReadFrom asks for at least 512 bytes of spare capacity before
-	// each read. Reserve that small tail so an exact Content-Length response can
-	// observe EOF without growing the buffer a second time.
+	// bytes.Buffer.ReadFrom asks for at least bytes.MinRead spare bytes before
+	// each read. Reserve that documented standard-library tail so an exact
+	// Content-Length response can observe EOF without an extra growth step.
+	//
+	// 按 bytes.Buffer.ReadFrom 的官方约定额外预留 bytes.MinRead，避免读取 EOF
+	// 前再扩容一次；Content-Length 只作为容量提示，不作为读取边界。
 	buf := bytes.NewBuffer(make([]byte, 0, int(contentLength)+bytes.MinRead))
 	_, err := buf.ReadFrom(body)
 	return buf.Bytes(), err
