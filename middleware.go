@@ -577,39 +577,42 @@ func parseRequestURL(c *Client, r *Request) error {
 		}
 	}
 
-	// Adding Query Param
-	query := make(url.Values)
-	for k, v := range c.QueryParams {
-		for _, iv := range v {
-			query.Add(k, iv)
-		}
-	}
-
-	for k, v := range r.QueryParams {
-		// remove query param from client level by key
-		// since overrides happens for that key in the request
-		query.Del(k)
-
-		for _, iv := range v {
-			query.Add(k, iv)
-		}
-	}
-
 	// Preserve query string order partially.
 	// Since not feasible in `SetQuery*` resty methods, because
 	// standard package `url.Encode(...)` sorts the query params
 	// alphabetically
-	if len(query) > 0 {
+	if query := encodeQueryParams(c.QueryParams, r.QueryParams); query != "" {
 		if util.IsStringEmpty(reqURL.RawQuery) {
-			reqURL.RawQuery = query.Encode()
+			reqURL.RawQuery = query
 		} else {
-			reqURL.RawQuery = reqURL.RawQuery + "&" + query.Encode()
+			reqURL.RawQuery = reqURL.RawQuery + "&" + query
 		}
 	}
 
 	reqURL.Host = removeEmptyPort(reqURL.Host)
 	r.URL = reqURL
 	return nil
+}
+
+func encodeQueryParams(clientParams, requestParams url.Values) string {
+	if len(clientParams) == 0 {
+		return requestParams.Encode()
+	}
+	if len(requestParams) == 0 {
+		return clientParams.Encode()
+	}
+
+	// Request-level values replace client-level values by key. url.Values.Encode
+	// only reads the map and slices, so sharing the existing value slices avoids
+	// copying every string on every request.
+	query := make(url.Values, len(clientParams)+len(requestParams))
+	for key, values := range clientParams {
+		query[key] = values
+	}
+	for key, values := range requestParams {
+		query[key] = values
+	}
+	return query.Encode()
 }
 
 func parseRequestHeader(c *Client, r *Request) error {

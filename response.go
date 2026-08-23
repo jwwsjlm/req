@@ -1,6 +1,7 @@
 package req
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +12,11 @@ import (
 	"github.com/jwwsjlm/req/v3/internal/header"
 	"github.com/jwwsjlm/req/v3/internal/util"
 )
+
+// Keep the hint deliberately modest because Content-Length is controlled by
+// the peer and may be inaccurate. This covers typical API responses without
+// allowing a tiny body to trigger a large eager allocation.
+const maxResponseBodyPreallocateSize = 64 << 10
 
 // ErrResponseBodyTooLarge is returned when a response body exceeds the limit
 // configured via Client.SetMaxResponseSize or Request.SetMaxResponseSize.
@@ -322,12 +328,25 @@ func (r *Response) ToBytes() (body []byte, err error) {
 		}
 		r.body = body
 	}()
-	body, err = io.ReadAll(r.Body)
+	body, err = readResponseBody(r.Body, r.ContentLength)
 	r.setReceivedAt()
 	if err == nil && r.Request.client.responseBodyTransformer != nil {
 		body, err = r.Request.client.responseBodyTransformer(body, r.Request, r)
 	}
 	return
+}
+
+func readResponseBody(body io.Reader, contentLength int64) ([]byte, error) {
+	if contentLength <= 0 || contentLength > maxResponseBodyPreallocateSize {
+		return io.ReadAll(body)
+	}
+
+	// bytes.Buffer.ReadFrom asks for at least 512 bytes of spare capacity before
+	// each read. Reserve that small tail so an exact Content-Length response can
+	// observe EOF without growing the buffer a second time.
+	buf := bytes.NewBuffer(make([]byte, 0, int(contentLength)+bytes.MinRead))
+	_, err := buf.ReadFrom(body)
+	return buf.Bytes(), err
 }
 
 // Dump return the string content that have been dumped for the request.
