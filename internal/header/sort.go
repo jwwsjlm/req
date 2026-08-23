@@ -22,6 +22,12 @@ type sorter struct {
 	kvs   []KeyValues
 }
 
+// linearHeaderOrderSearchLimit bounds the small-input scan before switching to
+// the map-backed lookup. Keeping the threshold explicit makes the allocation
+// trade-off easy to review and tune without changing ordering semantics.
+//
+// linearHeaderOrderSearchLimit 限制小输入线性扫描的规模，超过后切换到
+// map 查找。将阈值显式命名，便于审查和调优，同时不改变排序语义。
 const linearHeaderOrderSearchLimit = 1024
 
 func (s *sorter) Len() int { return len(s.kvs) }
@@ -57,6 +63,11 @@ func SortKeyValues(kvs []KeyValues, orderedKeys []string) {
 	sort.Sort(&sorter{ranks: ranks, kvs: kvs})
 }
 
+// headerOrderRanksLinear computes ranks with a bounded nested scan for small
+// header lists, avoiding the map allocation used by the large-list path.
+//
+// headerOrderRanksLinear 对小 Header 列表执行有界嵌套扫描，避免大列表路径的
+// map 分配。
 func headerOrderRanksLinear(kvs []KeyValues, orderedKeys []string) []int {
 	ranks := make([]int, len(kvs))
 	for i := range kvs {
@@ -84,6 +95,11 @@ func canonicalHeaderKeyEqual(a, b string) bool {
 	return ascii.EqualFold(a, b) && httpguts.ValidHeaderFieldName(a)
 }
 
+// headerOrderRanksMap computes ranks through one canonicalization map for
+// larger lists while preserving the last-rank-wins behavior for duplicates.
+//
+// headerOrderRanksMap 对较大列表使用一次规范化 map 计算顺序，并保持重复键
+// “最后一个 rank 生效”的旧语义。
 func headerOrderRanksMap(kvs []KeyValues, orderedKeys []string) []int {
 	// Canonicalize once before sorting. The legacy implementation called the
 	// same standard-library function from Less for every comparison. Do not size

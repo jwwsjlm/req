@@ -167,6 +167,26 @@ func TestSortKeyValuesLargeInputMatchesLegacy(t *testing.T) {
 	}
 }
 
+func TestSortKeyValuesLargeInvalidNamesMatchesLegacy(t *testing.T) {
+	// Keep the input above the map-path threshold while exercising names that
+	// CanonicalMIMEHeaderKey intentionally leaves unchanged.
+	// 保持输入超过 map 路径阈值，并覆盖 CanonicalMIMEHeaderKey 有意原样保留的名称。
+	kvs := make([]KeyValues, 48)
+	base := []string{"bad key", "BAD KEY", "ſ", "K", ":method", ":METHOD"}
+	for i := range kvs {
+		kvs[i] = KeyValues{Key: base[i%len(base)]}
+	}
+	order := []string{"K", "BAD KEY", ":METHOD", "bad key", "ſ", ":method"}
+
+	got := append([]KeyValues(nil), kvs...)
+	want := append([]KeyValues(nil), kvs...)
+	SortKeyValues(got, order)
+	legacySort(want, order)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("SortKeyValues() = %#v, want legacy ordering %#v", got, want)
+	}
+}
+
 func TestCanonicalHeaderKeyEqualMatchesTextproto(t *testing.T) {
 	values := []string{
 		"", "Accept", "accept", "ACCEPT", "x-custom-header", "X-Custom-Header",
