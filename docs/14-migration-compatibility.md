@@ -47,7 +47,15 @@ multipart 文件默认流式发送。已知 size/content-type 时可以计算 Co
 
 ### TLS 与 HTTP/3
 
-uTLS 自定义只用于 HTTP/1.1/2。HTTP/3 使用 Go `crypto/tls` 和 QUIC 专用配置。旧的 `SetTLSFingerprintSpec` 保留，但多连接 client 应迁移到 `SetTLSFingerprintSpecFactory`，每次返回新 spec。
+uTLS 自定义只用于 HTTP/1.1/2。HTTP/3 使用 Go `crypto/tls` 和 QUIC 专用配置。旧的 `SetTLSFingerprintSpec` 保留，但多连接 client 应迁移到 `SetTLSFingerprintSpecFactory`，每次返回非 nil 的新 spec；nil factory/spec 现在返回握手错误，不再允许 panic。
+
+uTLS 路径现在保留标准 `tls.Config` 的显式 SNI、mTLS、验证回调执行与错误语义、session cache、renegotiation、key log 和 ECH 客户端配置，并在 `Client.Clone` 后重新绑定 clone 自己的 TLS config。`MinVersion`、`MaxVersion`、`CipherSuites`、`CurvePreferences`、`NextProtos` 会先转换，但浏览器、随机或自定义 spec 会按自身 ClientHello 形状覆盖它们；需要强约束这些字段时应选用满足策略的 spec 或标准 TLS。uTLS v1.8.2 无法补出标准 `ConnectionState` 的 `CurveID`、`HelloRetryRequest` 与私有 keying-material exporter，依赖这些信息的策略应保留标准 TLS 路径。依赖旧版本中“开启指纹后安全/身份配置被忽略”的代码属于不安全偶然行为，应按新语义修正测试。
+
+原有 `SetTLSFingerprintRandomized` 保持兼容。新代码应根据协议明确选择 `SetTLSFingerprintRandomizedALPN` 或 `SetTLSFingerprintRandomizedNoALPN`；需要跨新连接稳定时使用对应 `WithSeed` API。`ParseTLSClientHello` 只接受完整、未分片的明文 ClientHello record，并默认严格拒绝未知扩展。
+
+Chrome、Firefox、Safari convenience preset 已固定为当前明确版本，避免以后升级 uTLS 时 `_Auto` 静默漂移。浏览器 OS 选项主要改变 UA、Client Hints 和 Header，不代表 TLS ClientHello 随 OS 完全变化。Safari 当前没有专用 HTTP/3 profile。
+
+切换浏览器 profile 会清理未来连接使用的 profile-owned Header/H2/H3 状态，但不会改写已经建立的连接。已开始发送请求的 client 不应原地切换身份；优先新建或 clone 尚未使用的 client。
 
 ### Trace
 

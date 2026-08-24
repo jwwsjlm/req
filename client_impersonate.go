@@ -205,7 +205,7 @@ func (c *Client) ImpersonateChromeWithOS(os BrowserOS) *Client {
 	profile := chromeBrowserProfile(os)
 	c.setBrowserProfile(profile)
 	c.
-		SetTLSFingerprint(utls.HelloChrome_Auto).
+		SetTLSFingerprint(utls.HelloChrome_133).
 		SetHTTP2SettingsFrame(chromeHttp2Settings...).
 		SetHTTP2ConnectionFlow(15663105).
 		SetHTTP2HeaderPriority(chromeHeaderPriority).
@@ -447,8 +447,10 @@ var (
 	}
 )
 
-// ImpersonateSafari impersonates Safari browser (version 16.6).
+// ImpersonateSafari uses Safari 16.6-style headers and user agent with the
+// uTLS Safari 16.0 preset. It currently has no dedicated HTTP/3 profile.
 func (c *Client) ImpersonateSafari() *Client {
+	c.resetBrowserTransportProfile()
 	c.browserProfile = nil
 	c.clearBrowserProfileHeaders()
 	c.

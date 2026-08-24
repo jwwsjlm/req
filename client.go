@@ -1307,12 +1307,12 @@ func (c *Client) SetDial(fn func(ctx context.Context, network, addr string) (net
 
 // SetTLSFingerprintChrome uses tls fingerprint of Chrome browser.
 func (c *Client) SetTLSFingerprintChrome() *Client {
-	return c.SetTLSFingerprint(utls.HelloChrome_Auto)
+	return c.SetTLSFingerprint(utls.HelloChrome_133)
 }
 
 // SetTLSFingerprintFirefox uses tls fingerprint of Firefox browser.
 func (c *Client) SetTLSFingerprintFirefox() *Client {
-	return c.SetTLSFingerprint(utls.HelloFirefox_Auto)
+	return c.SetTLSFingerprint(utls.HelloFirefox_120)
 }
 
 // SetTLSFingerprintEdge uses tls fingerprint of Edge browser.
@@ -1327,7 +1327,7 @@ func (c *Client) SetTLSFingerprintQQ() *Client {
 
 // SetTLSFingerprintSafari uses tls fingerprint of Safari browser.
 func (c *Client) SetTLSFingerprintSafari() *Client {
-	return c.SetTLSFingerprint(utls.HelloSafari_Auto)
+	return c.SetTLSFingerprint(utls.HelloSafari_16_0)
 }
 
 // SetTLSFingerprint360 uses tls fingerprint of 360 browser.
@@ -1350,90 +1350,12 @@ func (c *Client) SetTLSFingerprintRandomized() *Client {
 	return c.SetTLSFingerprint(utls.HelloRandomized)
 }
 
-// uTLSConn is wrapper of UConn which implements the net.Conn interface.
-type uTLSConn struct {
-	*utls.UConn
-}
-
-func (conn *uTLSConn) ConnectionState() tls.ConnectionState {
-	cs := conn.Conn.ConnectionState()
-	return tls.ConnectionState{
-		Version:                     cs.Version,
-		HandshakeComplete:           cs.HandshakeComplete,
-		DidResume:                   cs.DidResume,
-		CipherSuite:                 cs.CipherSuite,
-		NegotiatedProtocol:          cs.NegotiatedProtocol,
-		NegotiatedProtocolIsMutual:  cs.NegotiatedProtocolIsMutual,
-		ServerName:                  cs.ServerName,
-		PeerCertificates:            cs.PeerCertificates,
-		VerifiedChains:              cs.VerifiedChains,
-		SignedCertificateTimestamps: cs.SignedCertificateTimestamps,
-		OCSPResponse:                cs.OCSPResponse,
-		TLSUnique:                   cs.TLSUnique,
-	}
-}
-
 // SetTLSFingerprint set the tls fingerprint for tls handshake, will use utls
 // (https://github.com/refraction-networking/utls) to perform the tls handshake,
 // which uses the specified clientHelloID to simulate the tls fingerprint.
 // Note this is valid for HTTP1 and HTTP2, not HTTP3.
 func (c *Client) SetTLSFingerprint(clientHelloID utls.ClientHelloID) *Client {
 	return c.setTLSFingerprint(clientHelloID, nil)
-}
-
-func (c *Client) setTLSFingerprint(clientHelloID utls.ClientHelloID, uTLSConnApply func(*uTLSConn) error) *Client {
-	fn := func(ctx context.Context, addr string, plainConn net.Conn) (conn net.Conn, tlsState *tls.ConnectionState, err error) {
-		colonPos := strings.LastIndex(addr, ":")
-		if colonPos == -1 {
-			colonPos = len(addr)
-		}
-		hostname := addr[:colonPos]
-		tlsConfig := c.GetTLSClientConfig()
-		utlsConfig := &utls.Config{
-			ServerName:                  hostname,
-			Rand:                        tlsConfig.Rand,
-			Time:                        tlsConfig.Time,
-			RootCAs:                     tlsConfig.RootCAs,
-			NextProtos:                  tlsConfig.NextProtos,
-			ClientCAs:                   tlsConfig.ClientCAs,
-			InsecureSkipVerify:          tlsConfig.InsecureSkipVerify,
-			CipherSuites:                tlsConfig.CipherSuites,
-			SessionTicketsDisabled:      tlsConfig.SessionTicketsDisabled,
-			MinVersion:                  tlsConfig.MinVersion,
-			MaxVersion:                  tlsConfig.MaxVersion,
-			DynamicRecordSizingDisabled: tlsConfig.DynamicRecordSizingDisabled,
-			KeyLogWriter:                tlsConfig.KeyLogWriter,
-		}
-		uconn := &uTLSConn{utls.UClient(plainConn, utlsConfig, clientHelloID)}
-		if uTLSConnApply != nil {
-			if err = uTLSConnApply(uconn); err != nil {
-				return
-			}
-		}
-		err = uconn.HandshakeContext(ctx)
-		if err != nil {
-			return
-		}
-		cs := uconn.Conn.ConnectionState()
-		conn = uconn
-		tlsState = &tls.ConnectionState{
-			Version:                     cs.Version,
-			HandshakeComplete:           cs.HandshakeComplete,
-			DidResume:                   cs.DidResume,
-			CipherSuite:                 cs.CipherSuite,
-			NegotiatedProtocol:          cs.NegotiatedProtocol,
-			NegotiatedProtocolIsMutual:  cs.NegotiatedProtocolIsMutual,
-			ServerName:                  cs.ServerName,
-			PeerCertificates:            cs.PeerCertificates,
-			VerifiedChains:              cs.VerifiedChains,
-			SignedCertificateTimestamps: cs.SignedCertificateTimestamps,
-			OCSPResponse:                cs.OCSPResponse,
-			TLSUnique:                   cs.TLSUnique,
-		}
-		return
-	}
-	c.Transport.SetTLSHandshake(fn)
-	return c
 }
 
 // SetTLSFingerprintSpec sets the TLS fingerprint from a custom ClientHelloSpec.
@@ -1449,10 +1371,18 @@ func (c *Client) SetTLSFingerprintSpec(clientHelloSpec *utls.ClientHelloSpec) *C
 
 // SetTLSFingerprintSpecFactory sets the TLS fingerprint from a factory that
 // returns a fresh custom ClientHelloSpec for every TLS handshake.
+// The factory may be called concurrently and must synchronize any shared state.
 // Note this is valid for HTTP1 and HTTP2, not HTTP3.
 func (c *Client) SetTLSFingerprintSpecFactory(fn func() *utls.ClientHelloSpec) *Client {
 	return c.setTLSFingerprint(utls.HelloCustom, func(conn *uTLSConn) error {
-		return conn.ApplyPreset(fn())
+		if fn == nil {
+			return errors.New("req: TLS fingerprint spec factory is nil")
+		}
+		spec := fn()
+		if spec == nil {
+			return errors.New("req: TLS fingerprint spec factory returned nil")
+		}
+		return conn.ApplyPreset(spec)
 	})
 }
 
@@ -1468,9 +1398,13 @@ func (c *Client) SetTLSFingerprintJA3(ja3, userAgent string, forceHTTP1 bool) *C
 	})
 }
 
-// SetTLSHandshake set the custom tls handshake function, only valid for HTTP1 and HTTP2, not HTTP3,
-// it specifies an optional dial function for tls handshake, it works even if a proxy is set, can be
-// used to customize the tls fingerprint.
+// SetTLSHandshake sets the custom TLS handshake function for HTTP/1 and HTTP/2,
+// not HTTP/3. Once invoked, the hook owns plainConn on its success path: it
+// must either return a connection that wraps/uses plainConn, or close plainConn
+// before returning an independent connection. The hook must honor ctx
+// cancellation and/or a closed plainConn. On error, cancellation, or timeout,
+// req closes plainConn and any connection the hook returns, including a late
+// result after req has already returned.
 func (c *Client) SetTLSHandshake(fn func(ctx context.Context, addr string, plainConn net.Conn) (conn net.Conn, tlsState *tls.ConnectionState, err error)) *Client {
 	c.Transport.SetTLSHandshake(fn)
 	return c

@@ -1,6 +1,6 @@
 // Copyright 2009 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// license described in THIRD_PARTY_NOTICES.md.
 
 // The wire protocol for HTTP's "chunked" Transfer-Encoding.
 
@@ -165,10 +165,11 @@ var semi = []byte(";")
 
 // removeChunkExtension removes any chunk-extension from p.
 // For example,
-//     "0" => "0"
-//     "0;token" => "0"
-//     "0;token=val" => "0"
-//     `0;token="quoted string"` => "0"
+//
+//	"0" => "0"
+//	"0;token" => "0"
+//	"0;token=val" => "0"
+//	`0;token="quoted string"` => "0"
 func removeChunkExtension(p []byte) ([]byte, error) {
 	p, _, _ = util.CutBytes(p, semi)
 	// TODO: care about exact syntax of chunk extensions? We're

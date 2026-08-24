@@ -71,6 +71,8 @@ client.SetDial(func(ctx context.Context, network, address string) (net.Conn, err
 
 Unix Socket 使用 `SetUnixSocket(path)`。高级 TLS 接入点包括 `SetDialTLS` 和 `SetTLSHandshake`。这些入口会改变网络职责边界，应配套连接超时、取消和测试。
 
+自定义 TLS hook 的连接所有权是强契约：成功时应返回包装/继续使用传入 plain connection 的 TLS 连接；如果另建一条独立连接，hook 必须在成功返回前关闭原 plain connection。失败、超时或取消时 req 会关闭原连接以及 hook 返回的非 nil/迟到连接。hook 还必须响应传入 context 或底层连接关闭；任何永不响应 context、连接关闭或外部信号的用户回调都无法由 Go 强制终止，应在高并发集成测试中覆盖该契约。
+
 ## 重定向策略
 
 ```go

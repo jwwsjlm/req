@@ -101,7 +101,8 @@
 | 场景 | API |
 | --- | --- |
 | 浏览器 | `ImpersonateChrome`、`ImpersonateChromeWithOS`、`ImpersonateChromeRandomOS`、Firefox 对应方法、`ImpersonateSafari`、`RandomBrowserOS` |
-| TLS 指纹 | `SetTLSFingerprint`、`SetTLSFingerprintJA3`、`SetTLSFingerprintSpec`、`SetTLSFingerprintSpecFactory`、各内置 `SetTLSFingerprint*` |
+| TLS 指纹 | `SetTLSFingerprint`、`SetTLSFingerprintJA3`、`SetTLSFingerprintSpec`、`SetTLSFingerprintSpecFactory`、`SetTLSFingerprintRandomizedALPN`、`SetTLSFingerprintRandomizedNoALPN`、两种 `WithSeed`、各内置 preset |
+| ClientHello 导入 | `ParseTLSClientHello` |
 | 证书/TLS | `SetTLSClientConfig`、`GetTLSClientConfig`、`SetRootCertFromString`、`SetRootCertsFromFile`、`SetCertFromFile`、`SetCerts`、`EnableInsecureSkipVerify` |
 | HTTP 版本 | `EnableForceHTTP1`、`EnableForceHTTP2`、`EnableForceHTTP3`、`DisableForceHttpVersion`、`EnableH2C`、`EnableHTTP3`、`DisableHTTP3` |
 | HTTP/2 | `SetHTTP2SettingsFrame`、`SetHTTP2ConnectionFlow`、`SetHTTP2InitialStreamID`、`SetHTTP2HeaderPriority`、`SetHTTP2PriorityFrames`、HTTP/2 timeout/limit 方法 |

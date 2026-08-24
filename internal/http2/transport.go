@@ -1,6 +1,6 @@
 // Copyright 2015 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// license described in THIRD_PARTY_NOTICES.md.
 
 // Transport code.
 
@@ -638,49 +638,98 @@ func (t *Transport) dialTCP(ctx context.Context, network, addr string) (net.Conn
 // SetHosts), the custom dialer is used for the underlying TCP connection.
 func (t *Transport) dialTLSWithContext(ctx context.Context, network, addr string, cfg *tls.Config) (reqtls.Conn, error) {
 	if t.TLSHandshakeContext != nil {
-		conn, err := t.dialTCP(ctx, network, addr)
+		plainConn, err := t.dialTCP(ctx, network, addr)
 		if err != nil {
 			return nil, err
 		}
 		var firstTLSHost string
 		if firstTLSHost, _, err = net.SplitHostPort(addr); err != nil {
-			conn.Close()
+			plainConn.Close()
 			return nil, err
 		}
 		trace := httptrace.ContextClientTrace(ctx)
-		errc := make(chan error, 2)
-		var timer *time.Timer // for canceling TLS handshake
+		hookCtx, cancelHook := context.WithCancel(ctx)
+		defer cancelHook()
+
+		var timeout <-chan time.Time
+		var timer *time.Timer
 		if d := t.TLSHandshakeTimeout; d != 0 {
-			timer = time.AfterFunc(d, func() {
-				errc <- tlsHandshakeTimeoutError{}
-			})
+			timer = time.NewTimer(d)
+			timeout = timer.C
+			defer timer.Stop()
 		}
+		if trace != nil && trace.TLSHandshakeStart != nil {
+			trace.TLSHandshakeStart()
+		}
+
+		type handshakeResult struct {
+			conn  net.Conn
+			state *tls.ConnectionState
+			err   error
+		}
+		resultc := make(chan handshakeResult)
+		abandoned := make(chan struct{})
 		go func() {
-			if trace != nil && trace.TLSHandshakeStart != nil {
-				trace.TLSHandshakeStart()
+			conn, state, err := t.TLSHandshakeContext(hookCtx, firstTLSHost, plainConn)
+			if err == nil && (conn == nil || state == nil) {
+				err = errors.New("net/http: TLSHandshakeContext hook returned an incomplete result")
 			}
-			tlsCn, tlsState, err := t.TLSHandshakeContext(ctx, firstTLSHost, conn)
-			if err != nil {
-				if timer != nil {
-					timer.Stop()
+			result := handshakeResult{conn: conn, state: state, err: err}
+			select {
+			case resultc <- result:
+			case <-abandoned:
+				if result.conn != nil {
+					result.conn.Close()
 				}
+			}
+		}()
+
+		select {
+		case result := <-resultc:
+			if result.err != nil {
+				plainConn.Close()
+				if result.conn != nil {
+					result.conn.Close()
+				}
+				if trace != nil && trace.TLSHandshakeDone != nil {
+					trace.TLSHandshakeDone(tls.ConnectionState{}, result.err)
+				}
+				return nil, result.err
+			}
+			tlsConn, ok := result.conn.(reqtls.Conn)
+			if !ok {
+				plainConn.Close()
+				result.conn.Close()
+				err := errors.New("net/http: TLSHandshakeContext hook returned a connection without TLS state support")
 				if trace != nil && trace.TLSHandshakeDone != nil {
 					trace.TLSHandshakeDone(tls.ConnectionState{}, err)
 				}
-			} else {
-				conn = tlsCn
-				if trace != nil && trace.TLSHandshakeDone != nil {
-					trace.TLSHandshakeDone(*tlsState, nil)
-				}
+				return nil, err
 			}
-			errc <- err
-		}()
-		if err := <-errc; err != nil {
-			conn.Close()
+			if trace != nil && trace.TLSHandshakeDone != nil {
+				trace.TLSHandshakeDone(*result.state, nil)
+			}
+			// On success the hook owns plainConn and must have wrapped it, or
+			// closed it before returning this independent TLS connection.
+			return tlsConn, nil
+		case <-ctx.Done():
+			cancelHook()
+			plainConn.Close()
+			close(abandoned)
+			err := ctx.Err()
+			if trace != nil && trace.TLSHandshakeDone != nil {
+				trace.TLSHandshakeDone(tls.ConnectionState{}, err)
+			}
 			return nil, err
-		} else {
-			tlsCn := conn.(reqtls.Conn)
-			return tlsCn, nil
+		case <-timeout:
+			cancelHook()
+			plainConn.Close()
+			close(abandoned)
+			err := tlsHandshakeTimeoutError{}
+			if trace != nil && trace.TLSHandshakeDone != nil {
+				trace.TLSHandshakeDone(tls.ConnectionState{}, err)
+			}
+			return nil, err
 		}
 	}
 

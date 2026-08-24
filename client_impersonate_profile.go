@@ -35,6 +35,8 @@ type browserHeaderProfile struct {
 }
 
 var browserProfileHeaderKeys = []string{
+	HeaderOderKey,
+	PseudoHeaderOderKey,
 	"pragma",
 	"cache-control",
 	"sec-ch-ua",
@@ -53,9 +55,27 @@ var browserProfileHeaderKeys = []string{
 }
 
 func (c *Client) setBrowserProfile(profile *browserHeaderProfile) {
+	c.resetBrowserTransportProfile()
 	c.browserProfile = profile
 	c.clearBrowserProfileHeaders()
 	c.SetCommonHeaders(profile.baseHeaders)
+}
+
+// resetBrowserTransportProfile clears transport settings owned by a browser
+// profile before another profile is applied. It only affects future
+// connections; callers should configure impersonation before sending requests.
+// resetBrowserTransportProfile 会在切换浏览器 profile 前清理其拥有的传输层状态；
+// 已建立的连接不会被改写，因此应在发送请求前完成伪装配置。
+func (c *Client) resetBrowserTransportProfile() {
+	c.
+		SetHTTP2InitialStreamID(0).
+		SetHTTP2PriorityFrames().
+		SetHTTP3AdditionalSettings(nil).
+		SetHTTP3MaxResponseHeaderBytes(0).
+		SetHTTP3QUICConfig(nil).
+		SetHTTP3TLSClientConfig(nil).
+		DisableHTTP3Datagrams().
+		DisableHTTP3ExtendedConnect()
 }
 
 func (c *Client) clearBrowserProfileHeaders() {

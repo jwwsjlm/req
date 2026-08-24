@@ -13,7 +13,7 @@
 - 简洁链式 API，保留 `req.C().R().Get(...)` 这种写法。
 - 支持 HTTP/1.1、HTTP/2、HTTP/3，可以自动协商，也可以强制指定。
 - 浏览器伪装增强：Chrome、Firefox、Safari，并支持不同系统 profile。
-- 支持 uTLS TLS 指纹、JA3、自定义 `ClientHelloSpec`。
+- 支持 uTLS TLS 指纹、JA3、自定义/捕获的 `ClientHelloSpec`、显式 ALPN/NoALPN 随机模式和固定 seed。
 - HTTP/2 可控：SETTINGS、header order、pseudo header order、priority、initial stream id。
 - HTTP/3 可控：SETTINGS、GREASE、Datagram、Extended CONNECT、QUICConfig、TLS profile、Alt-Svc 失败回退。
 - HTTP/3 QUIC 性能 profile：token reuse、keepalive、窗口大小、初始包大小。
@@ -28,15 +28,26 @@
 
 原版 [imroc/req](https://github.com/imroc/req) 已经提供了成熟的链式 HTTP client、HTTP/2/HTTP/3、调试、重试、上传下载、Cookie、middleware 等基础能力。这个 fork 不是重写一套新库，而是在原版基础上继续补强我自己常用的场景：
 
-- **浏览器伪装更完整**：内置 Chrome、Firefox、Safari profile，并区分 Windows、macOS、Linux、Android、iOS；`ImpersonateChromeWithOS` 这类方法会同时配置 User-Agent、常见浏览器请求头、TLS 指纹、HTTP/2 顺序和部分 HTTP/3 profile，而不是只改一个 Header。
-- **TLS/HTTP 指纹可调得更细**：支持 JA3、自定义 uTLS `ClientHelloSpec`、Chrome TLS profile、HTTP/2 SETTINGS/header order/pseudo header order/priority/initial stream id，方便用 `tls.peet.ws/api/all` 这类服务验证实际指纹。
+- **浏览器伪装更完整**：内置固定版本的 Chrome、Firefox、Safari profile，并区分 Windows、macOS、Linux、Android、iOS 的 UA/Header；`ImpersonateChromeWithOS` 这类方法会同时配置常见请求头、TLS 指纹、HTTP/2 顺序和该 profile 明确提供的 HTTP/3 设置，而不是只改一个 Header。
+- **TLS/HTTP 指纹可调得更细**：支持 JA3、fresh uTLS `ClientHelloSpec`、严格导入捕获 ClientHello、可复现随机指纹、Chrome TLS profile、HTTP/2 SETTINGS/header order/pseudo header order/priority/initial stream id，方便在授权环境验证实际指纹。
 - **HTTP/3 控制更偏实战**：补了 HTTP/3 SETTINGS、GREASE、Datagram、Extended CONNECT、QUICConfig、QUIC 性能 profile、Alt-Svc 失败冷却和失败回退；普通抓取建议 `EnableHTTP3().EnableHTTP3FallbackOnError()`，不要一上来强制 H3。
 - **DNS 和 TLS 信息更方便**：支持自定义 resolver、DNS-over-TLS provider，并能从响应读取 TLS 版本、证书信息和 SHA-256 指纹，排查网络和证书问题更省事。
 - **请求构造更适合日常业务**：增加 Any 类型参数、多值 Header、raw path 参数、`SetQueryParamsFromStruct`、带 Content-Type 的 multipart field、显式 `Content-Length`、自定义 CookieJar factory 等补充方法。
 - **资源释放和高并发更稳**：对 dump、trace、retry、multipart 上传、parallel download 做了并发和资源释放加固，重点处理 response body、文件句柄、临时目录、goroutine/channel 退出这些长期运行时容易踩的坑。
 - **中文新手文档更完整**：README 和 [示例.md](示例.md) 都使用 `github.com/jwwsjlm/req/v3`，并覆盖从 `go mod init` 到完整业务 client 封装的用法。
 
-## 本次更新：兼容性优先的热路径优化
+## 本轮更新：uTLS 兼容与模式增强
+
+- **标准 TLS 配置兼容桥**：uTLS 路径保留显式 SNI、mTLS、验证回调的执行/错误语义、session cache、renegotiation 和 ECH 客户端配置；ClientHello 形状字段由所选指纹 spec 主导，完整边界见 TLS 专题文档。
+- **Clone 隔离**：指纹握手会重新绑定到 clone 自己的 `tls.Config`，原 client 与 clone 可使用不同 CA、SNI 和验证策略。
+- **IPv6 与错误路径**：正确处理 host、`host:port`、括号/非括号 IPv6；nil spec factory 返回错误而不是 panic。
+- **随机模式**：新增显式 ALPN/NoALPN 与 `WithSeed` API，调用方 seed/weights 会被防御性复制。
+- **捕获 ClientHello**：新增 `ParseTLSClientHello`，严格校验完整 TLS record，拒绝未知扩展并为每次握手返回 fresh spec。
+- **稳定 profile**：Chrome、Firefox、Safari TLS preset 固定明确版本，profile 切换会清理未来连接使用的旧 Header/H2/H3 状态。
+
+完整边界、兼容说明和示例见 [浏览器与 TLS 指纹](docs/10-browser-tls-fingerprint.md)。
+
+## 上一轮更新：兼容性优先的热路径优化
 
 本次更新不改变公开 API，重点减少请求与响应热路径中的重复分配，同时把异常输入和不可信远端数据的资源上限放在首位：
 
@@ -74,7 +85,7 @@
 | 请求、响应、认证和可靠性 | [构建请求](docs/03-building-requests.md)、[错误处理](docs/04-error-handling.md)、[认证与 Cookie](docs/05-auth-cookie.md)、[超时、重试与 Context](docs/06-timeout-retry-context.md) |
 | 网络、上传下载与可观测性 | [代理、DNS 与重定向](docs/07-proxy-dns-redirect.md)、[上传与下载](docs/08-upload-download.md)、[中间件与可观测性](docs/09-middleware-observability.md) |
 | 浏览器、TLS、HTTP/2 与 HTTP/3 | [浏览器与 TLS 指纹](docs/10-browser-tls-fingerprint.md)、[HTTP/2 与 HTTP/3](docs/11-http2-http3.md) |
-| 性能、配方、迁移与 API | [性能与稳定性](docs/12-performance-stability.md)、[生产配方](docs/13-recipes.md)、[迁移与兼容](docs/14-migration-compatibility.md)、[API 索引](docs/15-api-index.md) |
+| 性能、配方、迁移与 API | [性能与稳定性](docs/12-performance-stability.md)、[生产配方](docs/13-recipes.md)、[迁移与兼容](docs/14-migration-compatibility.md)、[API 索引](docs/15-api-index.md)、[上游项目与许可](docs/16-upstream-credits.md) |
 | 可编译示例 | [docs/examples](docs/examples/README.md) |
 
 ## 方法速查
@@ -103,7 +114,7 @@
 | Dump 细节 | `SetCommonDumpOptions`、`SetDumpOptions`、`EnableDumpAllWithoutBody`、`EnableDumpAllWithoutHeader`、`EnableDumpAllWithoutRequest`、`EnableDumpAllWithoutRequestBody`、`EnableDumpAllWithoutResponse`、`EnableDumpAllWithoutResponseBody`、`EnableDumpEachRequestWithoutHeader`、`EnableDumpEachRequestWithoutRequest`、`EnableDumpEachRequestWithoutRequestBody`、`EnableDumpEachRequestWithoutResponse`、`EnableDumpEachRequestWithoutResponseBody`、`EnableDumpWithoutBody`、`EnableDumpWithoutHeader`、`EnableDumpWithoutRequest`、`EnableDumpWithoutRequestBody`、`EnableDumpWithoutResponse`、`EnableDumpWithoutResponseBody` |
 | Trace | `EnableTraceAll`、`DisableTraceAll`、`EnableTrace`、`DisableTrace`、`TraceInfo`、`Blame` |
 | 浏览器伪装 | `ImpersonateChrome`、`ImpersonateChromeWithOS`、`ImpersonateChromeRandomOS`、`ImpersonateFirefox`、`ImpersonateFirefoxWithOS`、`ImpersonateFirefoxRandomOS`、`ImpersonateSafari`、`RandomBrowserOS` |
-| TLS 指纹 | `SetTLSFingerprint`、`SetTLSFingerprintJA3`、`SetTLSFingerprintSpec`、`SetTLSFingerprintSpecFactory`、`SetTLSFingerprintChrome`、`SetTLSFingerprintFirefox`、`SetTLSFingerprintSafari`、`SetTLSFingerprintEdge`、`SetTLSFingerprintQQ`、`SetTLSFingerprint360`、`SetTLSFingerprintIOS`、`SetTLSFingerprintAndroid`、`SetTLSFingerprintRandomized` |
+| TLS 指纹 | `SetTLSFingerprint`、`SetTLSFingerprintJA3`、`SetTLSFingerprintSpec`、`SetTLSFingerprintSpecFactory`、`SetTLSFingerprintRandomizedALPN`、`SetTLSFingerprintRandomizedNoALPN`、两种 `WithSeed`、内置浏览器 preset、`ParseTLSClientHello` |
 | TLS/证书 | `SetTLSClientConfig`、`GetTLSClientConfig`、`SetRootCertFromString`、`SetRootCertsFromFile`、`SetCertFromFile`、`SetCerts`、`EnableInsecureSkipVerify`、`DisableInsecureSkipVerify` |
 | DNS | `NewDNSOverTLSResolver`、`SetDNSResolver`、`SetResolver`、`SetHosts`、`SetDNSOverTLS`、`SetDNSOverTLSCloudflare`、`SetDNSOverTLSGoogle`、`SetDNSOverTLSQuad9`、`SetDNSOverTLSAdGuard`、`SetDNSOverTLSAli` |
 | 代理/dial | `SetProxyURL`、`SetProxy`、`SetProxyConnectHeader`、`SetGetProxyConnectHeader`、`SetUnixSocket`、`SetDial`、`SetDialTLS`、`SetTLSHandshake`、`SetTLSHandshakeTimeout` |
@@ -919,8 +930,12 @@ client := req.C().
 
 - TLS 指纹，作用于 HTTP/1.1 和 HTTP/2。
 - HTTP/2 SETTINGS、flow、priority、pseudo header order。
-- method-aware headers：GET/POST 会使用不同的浏览器请求头。
-- HTTP/3 SETTINGS、TLS profile、QUIC profile。
+- Chrome/Firefox 使用 method-aware headers，GET/POST 会采用不同请求头；Safari 当前使用一组静态 common headers。
+- Chrome/Firefox 明确提供的 HTTP/3 SETTINGS、TLS profile、QUIC profile；Safari 当前没有专用 H3 profile。
+
+Chrome 固定 uTLS Chrome 133，Firefox 固定 Firefox 120，Safari Header/UA 为 16.6 风格而 TLS preset 为 Safari 16.0。OS 选项主要改变 UA、Client Hints 和 Header，不代表 TLS ClientHello 会随 OS 完全变化。
+
+应在第一个请求前完成配置。profile 切换会清理未来连接的旧 Header/H2/H3 状态，但不会改写已经建立的连接；切换身份优先使用新 client 或尚未使用的 clone。
 
 ## JA3 和自定义 TLS 指纹
 
@@ -939,7 +954,7 @@ client := req.C().
 ```go
 client := req.C().
 	SetTLSFingerprintSpecFactory(func() *utls.ClientHelloSpec {
-		spec, err := utls.UTLSIdToSpec(utls.HelloChrome_Auto)
+		spec, err := utls.UTLSIdToSpec(utls.HelloChrome_133)
 		if err != nil {
 			panic(err)
 		}
@@ -947,7 +962,34 @@ client := req.C().
 	})
 ```
 
-旧的 `SetTLSFingerprintSpec` 仍保留兼容，但 uTLS 的 `ApplyPreset` 会修改传入 spec；同一个 client 连续连接不同域名时应改用 factory，避免重复握手失败。
+旧的 `SetTLSFingerprintSpec` 仍保留兼容，但 uTLS 的 `ApplyPreset` 会修改传入 spec；同一个 client 连续连接不同域名时应改用 factory，避免重复握手失败。Transport 可并发建连，自定义 factory 也必须自行保护共享状态。
+
+需要同一个 client 的随机结构在新连接间保持稳定时，使用固定 seed：
+
+```go
+seed, err := utls.NewPRNGSeed()
+if err != nil {
+	log.Fatal(err)
+}
+
+client := req.C().
+	SetTLSFingerprintRandomizedALPNWithSeed(seed)
+```
+
+只走 HTTP/1.1 的对端可改用 `SetTLSFingerprintRandomizedNoALPN` 或对应 `WithSeed`。req 会复制 seed，调用后修改原值不会影响 client。
+
+从授权环境捕获的一条完整明文 ClientHello record 也可以严格导入：
+
+```go
+factory, err := req.ParseTLSClientHello(rawTLSRecord)
+if err != nil {
+	log.Fatal(err)
+}
+
+client := req.C().SetTLSFingerprintSpecFactory(factory)
+```
+
+解析器限制单条 TLS plaintext record 为 16 KiB，拒绝未知扩展和任何捕获到的 `pre_shared_key` 扩展，并为每次握手从独立字节副本重新生成 fresh spec。
 
 注意：`SetTLSFingerprint*`、JA3、自定义 uTLS 只作用于 HTTP/1.1 和 HTTP/2。HTTP/3 使用 quic-go 和 Go 的 `crypto/tls`，不能假装成 uTLS QUIC ClientHello。
 
@@ -981,8 +1023,10 @@ client := req.C().
 	SetTLSClientConfig(&tls.Config{
 		MinVersion: tls.VersionTLS12,
 		ServerName: "example.com",
-	})
+})
 ```
+
+启用 uTLS 指纹后，上述标准配置中的显式 `ServerName`、客户端证书/动态证书回调、两个验证回调、session cache、renegotiation、key log 和 ECH 客户端配置都会桥接到 uTLS。`MinVersion`、`MaxVersion`、`CipherSuites`、`CurvePreferences`、`NextProtos` 会先转换，但浏览器、随机或自定义指纹 spec 会按自身扩展重写这些 ClientHello 形状字段；不要把它们当成 preset 下的强约束。`Client.Clone` 会使用 clone 自己的 TLS config。uTLS v1.8.2 无法为标准 `ConnectionState` 补出 `CurveID`、`HelloRetryRequest` 或私有 keying-material exporter；安全策略依赖这些信息时请阅读 [TLS 兼容桥边界](docs/10-browser-tls-fingerprint.md)。TLS 1.3 session 恢复还要求所选 ClientHello 自带真实 `PreSharedKeyExtension`；普通 Chrome parrot preset 不会被强行添加该扩展。
 
 ## HTTP/3 常用组合
 
@@ -1638,9 +1682,10 @@ go test ./...
 ## 致谢
 
 - 感谢 [imroc/req](https://github.com/imroc/req)，这个库的基础能力来自原项目。
+- 感谢 [refraction-networking/uTLS](https://github.com/refraction-networking/utls)，本项目通过它提供可定制 ClientHello、浏览器 TLS preset、随机指纹和捕获 ClientHello 解析能力，并在其上完成 req Transport 与标准 `tls.Config` 的兼容桥。uTLS 使用 BSD 3-Clause License；本项目与 uTLS、Refraction Networking、Google 或其贡献者不存在官方隶属或背书关系。
 - 感谢 [enetx/surf](https://github.com/enetx/surf)，HTTP/3 tuning、现代浏览器 profile、TLS impersonation 等思路给了很多参考。
 - 感谢 [go-resty/resty](https://github.com/go-resty/resty)，请求构造、multipart field、raw path 参数和易用 API 设计给了很多启发。
 
 ## License
 
-MIT，见 [LICENSE](LICENSE)。
+本项目原创代码在未另行注明时使用 MIT，见 [LICENSE](LICENSE)。仓库内 Go Authors 派生代码与 uTLS 的版权、再分发条件和免责声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)；其他依赖继续遵循各自许可证，上游归属说明见 [docs/16-upstream-credits.md](docs/16-upstream-credits.md)。

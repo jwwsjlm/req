@@ -61,8 +61,10 @@ type Options struct {
 	// past the TLS handshake.
 	DialTLSContext func(ctx context.Context, network, addr string) (net.Conn, error)
 
-	// TLSHandshakeContext specifies an optional dial function for tls handshake,
-	// it works even if a proxy is set, can be used to customize the tls fingerprint.
+	// TLSHandshakeContext specifies an optional TLS handshake hook. On success,
+	// it must return a connection using plainConn or close plainConn before
+	// returning an independent connection. It must honor context cancellation
+	// and/or a closed plain connection.
 	TLSHandshakeContext func(ctx context.Context, addr string, plainConn net.Conn) (conn net.Conn, tlsState *tls.ConnectionState, err error)
 
 	// TLSClientConfig specifies the TLS configuration to use with

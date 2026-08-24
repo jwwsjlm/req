@@ -1,6 +1,6 @@
 // Copyright 2018 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// license described in THIRD_PARTY_NOTICES.md.
 
 // Package socks provides SOCKS version 4/4a and 5 client implementations.
 //

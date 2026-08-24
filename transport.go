@@ -1,6 +1,6 @@
 // Copyright 2011 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// license described in THIRD_PARTY_NOTICES.md.
 
 // HTTP client implementation. See RFC 7230 through 7235.
 //
@@ -159,6 +159,7 @@ type Transport struct {
 	http3MaxResponseHeaderBytes int
 	http3QUICConfig             *quic.Config
 	http3TLSClientConfig        *tls.Config
+	tlsFingerprint              *utlsFingerprintConfig
 }
 
 // NewTransport is an alias of T
@@ -525,10 +526,15 @@ func (t *Transport) SetDialTLS(fn func(ctx context.Context, network, addr string
 	return t
 }
 
-// SetTLSHandshake set the custom tls handshake function, only valid for HTTP1 and HTTP2, not HTTP3,
-// it specifies an optional dial function for tls handshake, it works even if a proxy is set, can be
-// used to customize the tls fingerprint.
+// SetTLSHandshake sets the custom TLS handshake function for HTTP/1 and HTTP/2,
+// not HTTP/3. Once invoked, the hook owns plainConn on its success path: it
+// must either return a connection that wraps/uses plainConn, or close plainConn
+// before returning an independent connection. The hook must honor ctx
+// cancellation and/or a closed plainConn. On error, cancellation, or timeout,
+// req closes plainConn and any connection the hook returns, including a late
+// result after req has already returned.
 func (t *Transport) SetTLSHandshake(fn func(ctx context.Context, addr string, plainConn net.Conn) (conn net.Conn, tlsState *tls.ConnectionState, err error)) *Transport {
+	t.tlsFingerprint = nil
 	t.TLSHandshakeContext = fn
 	return t
 }
@@ -813,6 +819,7 @@ func (t *Transport) Clone() *Transport {
 		http3FallbackOnFailure:      t.http3FallbackOnFailure,
 		http3AltSvcFailureCooldown:  t.http3AltSvcFailureCooldown,
 		http3MaxResponseHeaderBytes: t.http3MaxResponseHeaderBytes,
+		tlsFingerprint:              t.tlsFingerprint,
 	}
 	if t.http3QUICConfig != nil {
 		tt.http3QUICConfig = t.http3QUICConfig.Clone()
@@ -852,6 +859,7 @@ func (t *Transport) Clone() *Transport {
 			PriorityFrames:             cloneSlice(t.t2.PriorityFrames),
 		}
 	}
+	tt.bindTLSFingerprint()
 	if t.t3 != nil {
 		tt.EnableHTTP3()
 	}
@@ -2255,40 +2263,86 @@ func newHttp2NotSupportedError(negotiatedProtocol string) error {
 	return errors.New(errMsg)
 }
 
+type customTLSHandshakeResult struct {
+	conn  net.Conn
+	state *tls.ConnectionState
+	err   error
+}
+
 func (t *Transport) customTlsHandshake(ctx context.Context, trace *httptrace.ClientTrace, addr string, pconn *persistConn) error {
-	errc := make(chan error, 2)
-	var timer *time.Timer // for canceling TLS handshake
+	plainConn := pconn.conn
+	hookCtx, cancelHook := context.WithCancel(ctx)
+	defer cancelHook()
+
+	var timeout <-chan time.Time
+	var timer *time.Timer
 	if d := t.TLSHandshakeTimeout; d != 0 {
-		timer = time.AfterFunc(d, func() {
-			errc <- tlsHandshakeTimeoutError{}
-		})
+		timer = time.NewTimer(d)
+		timeout = timer.C
+		defer timer.Stop()
 	}
+	if trace != nil && trace.TLSHandshakeStart != nil {
+		trace.TLSHandshakeStart()
+	}
+
+	resultc := make(chan customTLSHandshakeResult)
+	abandoned := make(chan struct{})
 	go func() {
-		if trace != nil && trace.TLSHandshakeStart != nil {
-			trace.TLSHandshakeStart()
+		conn, state, err := t.TLSHandshakeContext(hookCtx, addr, plainConn)
+		if err == nil && (conn == nil || state == nil) {
+			err = errors.New("net/http: TLSHandshakeContext hook returned an incomplete result")
 		}
-		conn, tlsState, err := t.TLSHandshakeContext(ctx, addr, pconn.conn)
-		if err != nil {
-			if timer != nil {
-				timer.Stop()
-			}
-			if trace != nil && trace.TLSHandshakeDone != nil {
-				trace.TLSHandshakeDone(tls.ConnectionState{}, err)
-			}
-		} else {
-			pconn.conn = conn
-			pconn.tlsState = tlsState
-			if trace != nil && trace.TLSHandshakeDone != nil {
-				trace.TLSHandshakeDone(*tlsState, nil)
+		result := customTLSHandshakeResult{conn: conn, state: state, err: err}
+		select {
+		case resultc <- result:
+		case <-abandoned:
+			if result.conn != nil {
+				result.conn.Close()
 			}
 		}
-		errc <- err
 	}()
-	if err := <-errc; err != nil {
-		pconn.conn.Close()
+
+	var result customTLSHandshakeResult
+	select {
+	case result = <-resultc:
+		if result.err == nil {
+			// Success transfers the returned connection back to Transport. The hook
+			// owns the input connection here and must have either wrapped it or
+			// closed it before returning an independent connection.
+			pconn.conn = result.conn
+			pconn.tlsState = result.state
+			if trace != nil && trace.TLSHandshakeDone != nil {
+				trace.TLSHandshakeDone(*result.state, nil)
+			}
+			return nil
+		}
+		plainConn.Close()
+		if result.conn != nil {
+			result.conn.Close()
+		}
+		if trace != nil && trace.TLSHandshakeDone != nil {
+			trace.TLSHandshakeDone(tls.ConnectionState{}, result.err)
+		}
+		return result.err
+	case <-ctx.Done():
+		cancelHook()
+		plainConn.Close()
+		close(abandoned)
+		err := ctx.Err()
+		if trace != nil && trace.TLSHandshakeDone != nil {
+			trace.TLSHandshakeDone(tls.ConnectionState{}, err)
+		}
+		return err
+	case <-timeout:
+		cancelHook()
+		plainConn.Close()
+		close(abandoned)
+		err := tlsHandshakeTimeoutError{}
+		if trace != nil && trace.TLSHandshakeDone != nil {
+			trace.TLSHandshakeDone(tls.ConnectionState{}, err)
+		}
 		return err
 	}
-	return nil
 }
 
 var testHookProxyConnectTimeout = context.WithTimeout

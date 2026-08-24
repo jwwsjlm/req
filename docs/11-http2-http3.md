@@ -41,7 +41,7 @@ client.SetHTTP2SettingsFrame(
 - `SetCommonHeaderOrder`
 - `SetCommonPseudoHeaderOder`
 
-这些参数既会影响协议行为，也可能成为指纹的一部分。普通 API client 不应盲目复制某个浏览器的单个数值；优先使用完整浏览器 profile，或保持默认值。
+这些参数既会影响协议行为，也可能成为指纹的一部分。普通 API client 不应盲目复制某个浏览器的单个数值；优先使用版本与协议边界明确的浏览器 profile，或保持默认值。
 
 ## 启用 HTTP/3
 
