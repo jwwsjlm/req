@@ -4,6 +4,7 @@
 
 | 主题 | 文件 | 覆盖 |
 | --- | --- | --- |
+| beginner | [beginner_test.go](beginner_test.go) | 零基础教程的业务 Client、Context、Path、成功/错误 JSON 与本地测试 |
 | basic | [basic_test.go](basic_test.go) | Client、Request、Path/Query/Header、成功结果解析 |
 | production-client | [production_client_test.go](production_client_test.go) | 超时、响应限制、backoff、retry condition |
 | auth-cookie | [auth_cookie_test.go](auth_cookie_test.go) | Bearer token、默认 CookieJar、会话复用 |

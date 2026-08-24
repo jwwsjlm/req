@@ -28,7 +28,8 @@ RemoteAddr        : %v
 LocalAddr         : %v`
 )
 
-// Blame return the human-readable reason of why request is slowing.
+// Blame returns a human-readable summary of the slowest traced request phase.
+// Blame 返回可读的最慢请求阶段摘要；未启用 trace 时返回相应提示。
 func (t TraceInfo) Blame() string {
 	if t.TotalTime == 0 && t.RemoteAddr == nil {
 		return "trace is not enabled"
@@ -54,7 +55,8 @@ func (t TraceInfo) Blame() string {
 	return fmt.Sprintf("the request total time is %v, and costs %v %s", t.TotalTime, mv, mk)
 }
 
-// String return the details of trace information.
+// String returns a human-readable rendering of the trace measurements.
+// String 返回 trace 各阶段耗时和连接地址的可读文本。
 func (t TraceInfo) String() string {
 	if t.TotalTime == 0 && t.RemoteAddr == nil {
 		return "trace is not enabled"

@@ -162,12 +162,14 @@ type Transport struct {
 	tlsFingerprint              *utlsFingerprintConfig
 }
 
-// NewTransport is an alias of T
+// NewTransport returns a new Transport and is an alias of T.
+// NewTransport 返回新的 Transport，是 T 的别名。
 func NewTransport() *Transport {
 	return T()
 }
 
-// T create a Transport.
+// T creates a Transport with req's default connection and timeout settings.
+// T 使用 req 的默认连接池与超时配置创建 Transport。
 func T() *Transport {
 	t := &Transport{
 		Options: transport.Options{
@@ -184,17 +186,21 @@ func T() *Transport {
 }
 
 // HttpRoundTripFunc is a http.RoundTripper implementation, which is a simple function.
+// HttpRoundTripFunc 将普通函数适配为 http.RoundTripper。
 type HttpRoundTripFunc func(req *http.Request) (resp *http.Response, err error)
 
 // RoundTrip implements http.RoundTripper.
+// RoundTrip 调用适配后的函数以执行一次 HTTP 事务。
 func (fn HttpRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return fn(req)
 }
 
 // HttpRoundTripWrapper is transport middleware function.
+// HttpRoundTripWrapper 定义包装底层 http.RoundTripper 的 transport 中间件。
 type HttpRoundTripWrapper func(rt http.RoundTripper) http.RoundTripper
 
 // HttpRoundTripWrapperFunc is transport middleware function, more convenient than HttpRoundTripWrapper.
+// HttpRoundTripWrapperFunc 是返回 HttpRoundTripFunc 的便捷 transport 中间件类型。
 type HttpRoundTripWrapperFunc func(rt http.RoundTripper) HttpRoundTripFunc
 
 func (f HttpRoundTripWrapperFunc) wrapper() HttpRoundTripWrapper {
@@ -205,6 +211,7 @@ func (f HttpRoundTripWrapperFunc) wrapper() HttpRoundTripWrapper {
 
 // WrapRoundTripFunc adds a transport middleware function that will give the caller
 // an opportunity to wrap the underlying http.RoundTripper.
+// WrapRoundTripFunc 按传入顺序添加便捷 transport 中间件，用于包装底层 http.RoundTripper。
 func (t *Transport) WrapRoundTripFunc(funcs ...HttpRoundTripWrapperFunc) *Transport {
 	var wrappers []HttpRoundTripWrapper
 	for _, fn := range funcs {
@@ -215,6 +222,7 @@ func (t *Transport) WrapRoundTripFunc(funcs ...HttpRoundTripWrapperFunc) *Transp
 
 // WrapRoundTrip adds a transport middleware function that will give the caller
 // an opportunity to wrap the underlying http.RoundTripper.
+// WrapRoundTrip 按传入顺序添加 transport 中间件，用于包装底层 http.RoundTripper。
 func (t *Transport) WrapRoundTrip(wrappers ...HttpRoundTripWrapper) *Transport {
 	if len(wrappers) == 0 {
 		return t
@@ -237,6 +245,7 @@ func (t *Transport) WrapRoundTrip(wrappers ...HttpRoundTripWrapper) *Transport {
 
 // DisableAutoDecode disable auto-detect charset and decode to utf-8
 // (enabled by default).
+// DisableAutoDecode 禁用响应字符集自动检测和 UTF-8 转码。
 func (t *Transport) DisableAutoDecode() *Transport {
 	t.disableAutoDecode = true
 	return t
@@ -244,6 +253,7 @@ func (t *Transport) DisableAutoDecode() *Transport {
 
 // EnableAutoDecode enable auto-detect charset and decode to utf-8
 // (enabled by default).
+// EnableAutoDecode 启用响应字符集自动检测和 UTF-8 转码；该功能默认启用。
 func (t *Transport) EnableAutoDecode() *Transport {
 	t.disableAutoDecode = false
 	return t
@@ -251,6 +261,7 @@ func (t *Transport) EnableAutoDecode() *Transport {
 
 // SetAutoDecodeContentTypeFunc set the function that determines whether the
 // specified `Content-Type` should be auto-detected and decode to utf-8.
+// SetAutoDecodeContentTypeFunc 设置函数，用于判断指定 Content-Type 是否进行字符集检测和 UTF-8 转码。
 func (t *Transport) SetAutoDecodeContentTypeFunc(fn func(contentType string) bool) *Transport {
 	t.autoDecodeContentType = fn
 	return t
@@ -258,6 +269,7 @@ func (t *Transport) SetAutoDecodeContentTypeFunc(fn func(contentType string) boo
 
 // SetAutoDecodeAllContentType enable try auto-detect charset and decode all
 // content type to utf-8.
+// SetAutoDecodeAllContentType 对所有 Content-Type 尝试字符集检测和 UTF-8 转码。
 func (t *Transport) SetAutoDecodeAllContentType() *Transport {
 	t.autoDecodeContentType = func(contentType string) bool {
 		return true
@@ -267,17 +279,20 @@ func (t *Transport) SetAutoDecodeAllContentType() *Transport {
 
 // SetAutoDecodeContentType set the content types that will be auto-detected and decode
 // to utf-8 (e.g. "json", "xml", "html", "text").
+// SetAutoDecodeContentType 设置需要自动检测字符集并转为 UTF-8 的 Content-Type 关键字。
 func (t *Transport) SetAutoDecodeContentType(contentTypes ...string) {
 	t.autoDecodeContentType = autoDecodeContentTypeFunc(contentTypes...)
 }
 
 // GetMaxIdleConns returns MaxIdleConns.
+// GetMaxIdleConns 返回所有主机合计允许保留的最大空闲连接数。
 func (t *Transport) GetMaxIdleConns() int {
 	return t.MaxIdleConns
 }
 
 // SetMaxIdleConns set the MaxIdleConns, which controls the maximum number of idle (keep-alive)
 // connections across all hosts. Zero means no limit.
+// SetMaxIdleConns 设置所有主机合计的最大空闲 keep-alive 连接数；零表示不限制。
 func (t *Transport) SetMaxIdleConns(max int) *Transport {
 	t.MaxIdleConns = max
 	return t
@@ -288,6 +303,7 @@ func (t *Transport) SetMaxIdleConns(max int) *Transport {
 // dialing, active, and idle states. On limit violation, dials will block.
 //
 // Zero means no limit.
+// SetMaxConnsPerHost 设置每个主机处于拨号、活动和空闲状态的连接总上限；零表示不限制。
 func (t *Transport) SetMaxConnsPerHost(max int) *Transport {
 	t.MaxConnsPerHost = max
 	return t
@@ -298,6 +314,7 @@ func (t *Transport) SetMaxConnsPerHost(max int) *Transport {
 // closing itself.
 //
 // Zero means no limit.
+// SetIdleConnTimeout 设置空闲 keep-alive 连接在关闭前可保持空闲的最长时间；零表示不限制。
 func (t *Transport) SetIdleConnTimeout(timeout time.Duration) *Transport {
 	t.IdleConnTimeout = timeout
 	return t
@@ -307,6 +324,7 @@ func (t *Transport) SetIdleConnTimeout(timeout time.Duration) *Transport {
 // maximum amount of time waiting to wait for a TLS handshake.
 //
 // Zero means no timeout.
+// SetTLSHandshakeTimeout 设置等待 TLS 握手完成的最长时间；零表示不超时。
 func (t *Transport) SetTLSHandshakeTimeout(timeout time.Duration) *Transport {
 	t.TLSHandshakeTimeout = timeout
 	return t
@@ -316,6 +334,7 @@ func (t *Transport) SetTLSHandshakeTimeout(timeout time.Duration) *Transport {
 // the amount of time to wait for a server's response headers after fully writing
 // the request (including its body, if any). This time does not include the time
 // to read the response body.
+// SetResponseHeaderTimeout 设置完整写出请求后等待响应 Header 的最长时间，不包含读取响应体的时间。
 func (t *Transport) SetResponseHeaderTimeout(timeout time.Duration) *Transport {
 	t.ResponseHeaderTimeout = timeout
 	return t
@@ -327,6 +346,7 @@ func (t *Transport) SetResponseHeaderTimeout(timeout time.Duration) *Transport {
 // Zero means no timeout and causes the body to be sent immediately, without waiting
 // for the server to approve.
 // This time does not include the time to send the request header.
+// SetExpectContinueTimeout 设置发送 Expect: 100-continue Header 后等待首个响应 Header 的时间；零会立即发送请求体。
 func (t *Transport) SetExpectContinueTimeout(timeout time.Duration) *Transport {
 	t.ExpectContinueTimeout = timeout
 	return t
@@ -337,6 +357,7 @@ func (t *Transport) SetExpectContinueTimeout(timeout time.Duration) *Transport {
 // If it returns an error, the Transport's RoundTrip fails with that error. It can
 // return (nil, nil) to not add headers.
 // If GetProxyConnectHeader is non-nil, ProxyConnectHeader is ignored.
+// SetGetProxyConnectHeader 设置动态生成 CONNECT 代理 Header 的函数；设置后静态 ProxyConnectHeader 会被忽略。
 func (t *Transport) SetGetProxyConnectHeader(fn func(ctx context.Context, proxyURL *url.URL, target string) (http.Header, error)) *Transport {
 	t.GetProxyConnectHeader = fn
 	return t
@@ -345,6 +366,7 @@ func (t *Transport) SetGetProxyConnectHeader(fn func(ctx context.Context, proxyU
 // SetProxyConnectHeader set the ProxyConnectHeader, which optionally specifies headers to
 // send to proxies during CONNECT requests.
 // To set the header dynamically, see SetGetProxyConnectHeader.
+// SetProxyConnectHeader 设置 CONNECT 请求发送给代理的静态 Header；动态配置请使用 SetGetProxyConnectHeader。
 func (t *Transport) SetProxyConnectHeader(header http.Header) *Transport {
 	t.ProxyConnectHeader = header
 	return t
@@ -353,6 +375,7 @@ func (t *Transport) SetProxyConnectHeader(header http.Header) *Transport {
 // SetReadBufferSize set the ReadBufferSize, which specifies the size of the read buffer used
 // when reading from the transport.
 // If zero, a default (currently 4KB) is used.
+// SetReadBufferSize 设置 transport 读取缓冲区大小；零使用当前 4 KiB 的默认值。
 func (t *Transport) SetReadBufferSize(size int) *Transport {
 	t.ReadBufferSize = size
 	return t
@@ -361,6 +384,7 @@ func (t *Transport) SetReadBufferSize(size int) *Transport {
 // SetWriteBufferSize set the WriteBufferSize, which specifies the size of the write buffer used
 // when writing to the transport.
 // If zero, a default (currently 4KB) is used.
+// SetWriteBufferSize 设置 transport 写入缓冲区大小；零使用当前 4 KiB 的默认值。
 func (t *Transport) SetWriteBufferSize(size int) *Transport {
 	t.WriteBufferSize = size
 	return t
@@ -370,6 +394,7 @@ func (t *Transport) SetWriteBufferSize(size int) *Transport {
 // response bytes are allowed in the server's response header.
 //
 // Zero means to use a default limit.
+// SetMaxResponseHeaderBytes 设置服务端响应 Header 的最大字节数；零使用默认上限。
 func (t *Transport) SetMaxResponseHeaderBytes(max int64) *Transport {
 	t.MaxResponseHeaderBytes = max
 	return t
@@ -383,6 +408,7 @@ func (t *Transport) SetMaxResponseHeaderBytes(max int64) *Transport {
 // want to advertise an unlimited value to the peer, Transport
 // interprets the highest possible value here (0xffffffff or 1<<32-1)
 // to mean no limit.
+// SetHTTP2MaxHeaderListSize 设置初始 SETTINGS 中声明的 HTTP/2 响应 Header 列表上限；零使用默认上限，uint32 最大值表示不限制。
 func (t *Transport) SetHTTP2MaxHeaderListSize(max uint32) *Transport {
 	t.t2.MaxHeaderListSize = max
 	return t
@@ -397,6 +423,7 @@ func (t *Transport) SetHTTP2MaxHeaderListSize(max uint32) *Transport {
 // server's SETTINGS_MAX_CONCURRENT_STREAMS is interpreted as
 // a global limit and callers of RoundTrip block when needed,
 // waiting for their turn.
+// SetHTTP2StrictMaxConcurrentStreams 设置是否把服务端的最大并发流数量作为全局连接池上限严格执行。
 func (t *Transport) SetHTTP2StrictMaxConcurrentStreams(strict bool) *Transport {
 	t.t2.StrictMaxConcurrentStreams = strict
 	return t
@@ -409,6 +436,7 @@ func (t *Transport) SetHTTP2StrictMaxConcurrentStreams(strict bool) *Transport {
 // there is no other traffic on the connection, the health check will
 // be performed every ReadIdleTimeout interval.
 // If zero, no health check is performed.
+// SetHTTP2ReadIdleTimeout 设置无入站帧后发送 PING 健康检查的等待时间；零禁用健康检查。
 func (t *Transport) SetHTTP2ReadIdleTimeout(timeout time.Duration) *Transport {
 	t.t2.ReadIdleTimeout = timeout
 	return t
@@ -418,6 +446,7 @@ func (t *Transport) SetHTTP2ReadIdleTimeout(timeout time.Duration) *Transport {
 // after which the connection will be closed if a response to Ping is
 // not received.
 // Defaults to 15s
+// SetHTTP2PingTimeout 设置 PING 响应超时，超时后关闭连接；默认值为 15 秒。
 func (t *Transport) SetHTTP2PingTimeout(timeout time.Duration) *Transport {
 	t.t2.PingTimeout = timeout
 	return t
@@ -427,12 +456,14 @@ func (t *Transport) SetHTTP2PingTimeout(timeout time.Duration) *Transport {
 // timeout after which the connection will be closed no data can be written
 // to it. The timeout begins when data is available to write, and is
 // extended whenever any bytes are written.
+// SetHTTP2WriteByteTimeout 设置 HTTP/2 无法写出任何字节时的超时，并在每次成功写入后延长。
 func (t *Transport) SetHTTP2WriteByteTimeout(timeout time.Duration) *Transport {
 	t.t2.WriteByteTimeout = timeout
 	return t
 }
 
 // SetHTTP2SettingsFrame set the ordered http2 settings frame.
+// SetHTTP2SettingsFrame 设置 HTTP/2 初始 SETTINGS 帧中各设置项的顺序和值。
 func (t *Transport) SetHTTP2SettingsFrame(settings ...http2.Setting) *Transport {
 	t.t2.Settings = settings
 	return t
@@ -440,6 +471,7 @@ func (t *Transport) SetHTTP2SettingsFrame(settings ...http2.Setting) *Transport 
 
 // SetHTTP2ConnectionFlow set the default http2 connection flow, which is the increment
 // value of initial WINDOW_UPDATE frame.
+// SetHTTP2ConnectionFlow 设置 HTTP/2 初始连接级 WINDOW_UPDATE 帧的增量值。
 func (t *Transport) SetHTTP2ConnectionFlow(flow uint32) *Transport {
 	t.t2.ConnectionFlow = flow
 	return t
@@ -448,18 +480,21 @@ func (t *Transport) SetHTTP2ConnectionFlow(flow uint32) *Transport {
 // SetHTTP2InitialStreamID sets the first client-initiated HTTP/2 stream ID.
 // Zero keeps the standard default stream ID 1. Even values are normalized to
 // the next valid client stream ID when a new HTTP/2 connection is created.
+// SetHTTP2InitialStreamID 设置客户端发起的首个 HTTP/2 stream ID；零使用标准值 1，偶数会调整为下一个合法奇数。
 func (t *Transport) SetHTTP2InitialStreamID(id uint32) *Transport {
 	t.t2.InitialStreamID = id
 	return t
 }
 
 // SetHTTP2HeaderPriority set the header priority param.
+// SetHTTP2HeaderPriority 设置请求 Header 使用的 HTTP/2 优先级参数。
 func (t *Transport) SetHTTP2HeaderPriority(priority http2.PriorityParam) *Transport {
 	t.t2.HeaderPriority = priority
 	return t
 }
 
 // SetHTTP2PriorityFrames set the ordered http2 priority frames.
+// SetHTTP2PriorityFrames 设置建立 HTTP/2 连接时发送的有序 PRIORITY 帧。
 func (t *Transport) SetHTTP2PriorityFrames(frames ...http2.PriorityFrame) *Transport {
 	t.t2.PriorityFrames = frames
 	return t
@@ -469,6 +504,7 @@ func (t *Transport) SetHTTP2PriorityFrames(frames ...http2.PriorityFrame) *Trans
 // use with tls.Client.
 // If nil, the default configuration is used.
 // If non-nil, HTTP/2 support may not be enabled by default.
+// SetTLSClientConfig 设置 tls.Client 使用的 TLS 配置；nil 使用默认配置，并在未单独配置时同步到 HTTP/3。
 func (t *Transport) SetTLSClientConfig(cfg *tls.Config) *Transport {
 	t.TLSClientConfig = cfg
 	if t.http3TLSClientConfig == nil {
@@ -478,6 +514,7 @@ func (t *Transport) SetTLSClientConfig(cfg *tls.Config) *Transport {
 }
 
 // SetDebug set the optional debug function.
+// SetDebug 设置可选的 transport 调试日志函数。
 func (t *Transport) SetDebug(debugf func(format string, v ...any)) *Transport {
 	t.Debugf = debugf
 	return t
@@ -495,6 +532,7 @@ func (t *Transport) SetDebug(debugf func(format string, v ...any)) *Transport {
 // proxy resolve domain names. SOCKS4 only supports IPv4 destinations.
 //
 // If Proxy is nil or returns a nil *URL, no proxy is used.
+// SetProxy 设置仅用于 HTTP/1 和 HTTP/2 的代理选择函数，支持 HTTP(S)、SOCKS5、SOCKS4 和 SOCKS4a URL。
 func (t *Transport) SetProxy(proxy func(*http.Request) (*url.URL, error)) *Transport {
 	t.Proxy = proxy
 	return t
@@ -507,6 +545,7 @@ func (t *Transport) SetProxy(proxy func(*http.Request) (*url.URL, error)) *Trans
 // The dial function runs concurrently with calls to RoundTrip.
 // A RoundTrip call that initiates a dial may end up using a connection dialed previously when the
 // earlier connection becomes idle before the later dial function completes.
+// SetDial 设置仅用于 HTTP/1 和 HTTP/2 明文 TCP 连接的自定义 DialContext 函数；nil 使用默认拨号器。
 func (t *Transport) SetDial(fn func(ctx context.Context, network, addr string) (net.Conn, error)) *Transport {
 	t.DialContext = fn
 	t.rejectProxyWithSetHosts = false
@@ -521,6 +560,7 @@ func (t *Transport) SetDial(fn func(ctx context.Context, network, addr string) (
 //
 // If it is set, the function that set in SetDial is not used for HTTPS requests and the TLSClientConfig
 // and TLSHandshakeTimeout are ignored. The returned net.Conn is assumed to already be past the TLS handshake.
+// SetDialTLS 设置仅用于非代理 HTTP/1 和 HTTP/2 HTTPS 请求的自定义 TLS 拨号函数；返回连接必须已完成 TLS 握手。
 func (t *Transport) SetDialTLS(fn func(ctx context.Context, network, addr string) (net.Conn, error)) *Transport {
 	t.DialTLSContext = fn
 	return t
@@ -533,6 +573,7 @@ func (t *Transport) SetDialTLS(fn func(ctx context.Context, network, addr string
 // cancellation and/or a closed plainConn. On error, cancellation, or timeout,
 // req closes plainConn and any connection the hook returns, including a late
 // result after req has already returned.
+// SetTLSHandshake 设置仅用于 HTTP/1 和 HTTP/2 的自定义 TLS 握手函数；成功路径由 hook 接管 plainConn，失败和取消路径由 req 关闭相关连接。
 func (t *Transport) SetTLSHandshake(fn func(ctx context.Context, addr string, plainConn net.Conn) (conn net.Conn, tlsState *tls.ConnectionState, err error)) *Transport {
 	t.tlsFingerprint = nil
 	t.TLSHandshakeContext = fn
@@ -548,6 +589,7 @@ type pendingAltSvc struct {
 }
 
 // EnableForceHTTP1 enable force using HTTP1 (disabled by default).
+// EnableForceHTTP1 强制后续请求使用 HTTP/1.1。
 func (t *Transport) EnableForceHTTP1() *Transport {
 	t.forceHttpVersion = h1
 	return t
@@ -555,12 +597,14 @@ func (t *Transport) EnableForceHTTP1() *Transport {
 
 // EnableForceHTTP2 enable force using HTTP2 for https requests
 // (disabled by default).
+// EnableForceHTTP2 强制后续 HTTPS 请求使用 HTTP/2。
 func (t *Transport) EnableForceHTTP2() *Transport {
 	t.forceHttpVersion = h2
 	return t
 }
 
 // EnableH2C enables HTTP2 over TCP without TLS.
+// EnableH2C 启用无需 TLS 的明文 HTTP/2（h2c）连接。
 func (t *Transport) EnableH2C() *Transport {
 	t.Options.EnableH2C = true
 	t.t2.AllowHTTP = true
@@ -571,6 +615,7 @@ func (t *Transport) EnableH2C() *Transport {
 }
 
 // DisableH2C disables HTTP2 over TCP without TLS.
+// DisableH2C 禁用无需 TLS 的明文 HTTP/2（h2c）连接。
 func (t *Transport) DisableH2C() *Transport {
 	t.Options.EnableH2C = false
 	t.t2.AllowHTTP = false
@@ -580,6 +625,7 @@ func (t *Transport) DisableH2C() *Transport {
 
 // EnableForceHTTP3 enable force using HTTP3 for https requests
 // (disabled by default).
+// EnableForceHTTP3 启用 HTTP/3 并在初始化成功后强制 HTTPS 请求使用 HTTP/3。
 func (t *Transport) EnableForceHTTP3() *Transport {
 	t.EnableHTTP3()
 	if t.t3 != nil {
@@ -590,11 +636,14 @@ func (t *Transport) EnableForceHTTP3() *Transport {
 
 // DisableForceHttpVersion disable force using specified http
 // version (disabled by default).
+// DisableForceHttpVersion 取消强制 HTTP 版本选择，恢复自动协议协商。
 func (t *Transport) DisableForceHttpVersion() *Transport {
 	t.forceHttpVersion = ""
 	return t
 }
 
+// DisableHTTP3 disables HTTP/3 and clears cached Alt-Svc state.
+// DisableHTTP3 禁用 HTTP/3，并清除已缓存的 Alt-Svc 和失败冷却状态。
 func (t *Transport) DisableHTTP3() {
 	t.altSvcJar = nil
 	t.pendingAltSvcs = nil
@@ -602,6 +651,8 @@ func (t *Transport) DisableHTTP3() {
 	t.t3 = nil
 }
 
+// EnableHTTP3 initializes HTTP/3 and Alt-Svc support if it is not already enabled.
+// EnableHTTP3 在尚未启用时初始化 HTTP/3 与 Alt-Svc 支持；初始化失败时保持禁用。
 func (t *Transport) EnableHTTP3() {
 	if t.t3 != nil {
 		return
@@ -803,6 +854,7 @@ func (t *Transport) readBufferSize() int {
 }
 
 // Clone returns a deep copy of t's exported fields.
+// Clone 返回 transport 配置、HTTP/2/HTTP/3 profile 和中间件链的独立副本，不复制活动连接池。
 func (t *Transport) Clone() *Transport {
 	tt := &Transport{
 		Headers:                     t.Headers.Clone(),
@@ -867,6 +919,7 @@ func (t *Transport) Clone() *Transport {
 }
 
 // EnableDump enables the dump for all requests with specified dump options.
+// EnableDump 使用指定选项为所有请求启用 transport 级 dump，并启动异步输出器（如已配置）。
 func (t *Transport) EnableDump(opt *DumpOptions) {
 	dump := newDumper(opt)
 	t.Dump = dump
@@ -874,6 +927,7 @@ func (t *Transport) EnableDump(opt *DumpOptions) {
 }
 
 // DisableDump disables the dump.
+// DisableDump 停止并移除 transport 级 dump 输出器。
 func (t *Transport) DisableDump() {
 	if t.Dump != nil {
 		t.Dump.Stop()
@@ -1433,6 +1487,7 @@ func (pc *persistConn) shouldRetryRequest(req *http.Request, err error) bool {
 // connected from previous requests but are now sitting idle in
 // a "keep-alive" state. It does not interrupt any connections currently
 // in use.
+// CloseIdleConnections 关闭 HTTP/1、HTTP/2 中当前空闲的 keep-alive 连接，不中断正在使用的连接。
 func (t *Transport) CloseIdleConnections() {
 	t.idleMu.Lock()
 	m := t.idleConn
@@ -1487,6 +1542,7 @@ func (t *Transport) prepareTransportCancel(req *http.Request, origCancel context
 // Deprecated: Use [Request.WithContext] to create a request with a
 // cancelable context instead. CancelRequest cannot cancel HTTP/2
 // requests. This may become a no-op in a future release of Go.
+// CancelRequest 通过旧式取消机制取消进行中的请求；新代码应使用带可取消 context 的 http.Request。
 func (t *Transport) CancelRequest(req *http.Request) {
 	t.reqMu.Lock()
 	cancel := t.reqCanceler[req]

@@ -196,11 +196,14 @@ func chromeBrowserProfile(os BrowserOS) *browserHeaderProfile {
 }
 
 // ImpersonateChrome impersonates Chrome browser (version aligned with uTLS Chrome 133).
+// ImpersonateChrome 使用 macOS Header、TLS、HTTP/2 和 HTTP/3 配置模拟 Chrome 133。
 func (c *Client) ImpersonateChrome() *Client {
 	return c.ImpersonateChromeWithOS(BrowserOSMacOS)
 }
 
 // ImpersonateChromeWithOS impersonates Chrome browser with the specified OS profile.
+// ImpersonateChromeWithOS 使用指定操作系统的 Header，并应用 Chrome 133 的传输层配置；
+// 不支持的操作系统值会回退到 macOS，BrowserOSRandom 会随机选择。
 func (c *Client) ImpersonateChromeWithOS(os BrowserOS) *Client {
 	profile := chromeBrowserProfile(os)
 	c.setBrowserProfile(profile)
@@ -223,6 +226,7 @@ func (c *Client) ImpersonateChromeWithOS(os BrowserOS) *Client {
 }
 
 // ImpersonateChromeRandomOS impersonates Chrome with a random OS profile.
+// ImpersonateChromeRandomOS 使用随机受支持的操作系统配置模拟 Chrome 133。
 func (c *Client) ImpersonateChromeRandomOS() *Client {
 	return c.ImpersonateChromeWithOS(BrowserOSRandom)
 }
@@ -367,11 +371,14 @@ func firefoxBrowserProfile(os BrowserOS) *browserHeaderProfile {
 }
 
 // ImpersonateFirefox impersonates Firefox browser (version 120).
+// ImpersonateFirefox 使用 macOS Header、TLS、HTTP/2 和 HTTP/3 配置模拟 Firefox 120。
 func (c *Client) ImpersonateFirefox() *Client {
 	return c.ImpersonateFirefoxWithOS(BrowserOSMacOS)
 }
 
 // ImpersonateFirefoxWithOS impersonates Firefox browser with the specified OS profile.
+// ImpersonateFirefoxWithOS 使用指定操作系统的 Header，并应用 Firefox 120 的传输层配置；
+// 不支持的操作系统值会回退到 macOS，BrowserOSRandom 会随机选择。
 func (c *Client) ImpersonateFirefoxWithOS(os BrowserOS) *Client {
 	profile := firefoxBrowserProfile(os)
 	c.setBrowserProfile(profile)
@@ -396,6 +403,7 @@ func (c *Client) ImpersonateFirefoxWithOS(os BrowserOS) *Client {
 }
 
 // ImpersonateFirefoxRandomOS impersonates Firefox with a random OS profile.
+// ImpersonateFirefoxRandomOS 使用随机受支持的操作系统配置模拟 Firefox 120。
 func (c *Client) ImpersonateFirefoxRandomOS() *Client {
 	return c.ImpersonateFirefoxWithOS(BrowserOSRandom)
 }
@@ -449,6 +457,8 @@ var (
 
 // ImpersonateSafari uses Safari 16.6-style headers and user agent with the
 // uTLS Safari 16.0 preset. It currently has no dedicated HTTP/3 profile.
+// ImpersonateSafari 使用 Safari 16.6 风格的 Header 与 User-Agent，并配合 uTLS
+// Safari 16.0 预设；当前不提供专用 HTTP/3 profile。
 func (c *Client) ImpersonateSafari() *Client {
 	c.resetBrowserTransportProfile()
 	c.browserProfile = nil

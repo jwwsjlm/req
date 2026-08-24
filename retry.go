@@ -12,13 +12,16 @@ func defaultGetRetryInterval(resp *Response, attempt int) time.Duration {
 
 // RetryConditionFunc is a retry condition, which determines
 // whether the request should retry.
+// RetryConditionFunc 根据响应和错误决定当前请求是否应重试。
 type RetryConditionFunc func(resp *Response, err error) bool
 
 // RetryHookFunc is a retry hook which will be executed before a retry.
+// RetryHookFunc 是每次重试前执行的回调。
 type RetryHookFunc func(resp *Response, err error)
 
 // GetRetryIntervalFunc is a function that determines how long should
 // sleep between retry attempts.
+// GetRetryIntervalFunc 根据响应和尝试序号计算下一次重试前的等待时间。
 type GetRetryIntervalFunc func(resp *Response, attempt int) time.Duration
 
 func backoffInterval(min, max time.Duration) GetRetryIntervalFunc {
@@ -54,6 +57,7 @@ type RetryOption struct {
 }
 
 // Clone returns a deep copy of RetryOption.
+// Clone 返回 RetryOption 的深拷贝；nil 接收者返回 nil。
 func (ro *RetryOption) Clone() *RetryOption {
 	if ro == nil {
 		return nil

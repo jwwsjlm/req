@@ -1,5 +1,7 @@
 # 快速入门
 
+如果你还没有创建过 Go module，或者希望通过这个项目理解 package、struct、方法、error、context 和测试，请先阅读 [Go 与 req 零基础入门](00-go-req-beginner.md)。本页适合已经有 Go module、希望快速查到 req 基本写法的读者。
+
 ## 安装
 
 在你的 Go module 中安装本 fork：

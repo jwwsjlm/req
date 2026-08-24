@@ -9,9 +9,11 @@ import (
 )
 
 // RedirectPolicy represents the redirect policy for Client.
+// RedirectPolicy 表示 Client 使用的重定向策略。
 type RedirectPolicy func(req *http.Request, via []*http.Request) error
 
-// MaxRedirectPolicy specifies the max number of redirect
+// MaxRedirectPolicy returns a policy that stops after the specified number of redirects.
+// MaxRedirectPolicy 返回一个在达到指定重定向次数后停止的策略。
 func MaxRedirectPolicy(noOfRedirect int) RedirectPolicy {
 	return func(req *http.Request, via []*http.Request) error {
 		if len(via) >= noOfRedirect {
@@ -21,12 +23,14 @@ func MaxRedirectPolicy(noOfRedirect int) RedirectPolicy {
 	}
 }
 
-// DefaultRedirectPolicy allows up to 10 redirects
+// DefaultRedirectPolicy returns the default policy, which allows up to 10 redirects.
+// DefaultRedirectPolicy 返回默认策略，最多允许 10 次重定向。
 func DefaultRedirectPolicy() RedirectPolicy {
 	return MaxRedirectPolicy(10)
 }
 
-// NoRedirectPolicy disable redirect behaviour
+// NoRedirectPolicy returns a policy that preserves the first redirect response.
+// NoRedirectPolicy 返回一个不跟随重定向并保留首次重定向响应的策略。
 func NoRedirectPolicy() RedirectPolicy {
 	return func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
@@ -36,6 +40,7 @@ func NoRedirectPolicy() RedirectPolicy {
 // SameDomainRedirectPolicy allows redirect only if the redirected domain
 // is the same as original domain, e.g. redirect to "www.imroc.cc" from
 // "imroc.cc" is allowed, but redirect to "google.com" is not allowed.
+// SameDomainRedirectPolicy 仅允许重定向到与初始请求相同的派生域名。
 func SameDomainRedirectPolicy() RedirectPolicy {
 	return func(req *http.Request, via []*http.Request) error {
 		if getDomain(req.URL.Host) != getDomain(via[0].URL.Host) {
@@ -48,6 +53,7 @@ func SameDomainRedirectPolicy() RedirectPolicy {
 // SameHostRedirectPolicy allows redirect only if the redirected host
 // is the same as original host, e.g. redirect to "www.imroc.cc" from
 // "imroc.cc" is not the allowed.
+// SameHostRedirectPolicy 仅允许重定向到与初始请求相同的主机名。
 func SameHostRedirectPolicy() RedirectPolicy {
 	return func(req *http.Request, via []*http.Request) error {
 		if getHostname(req.URL.Host) != getHostname(via[0].URL.Host) {
@@ -57,8 +63,8 @@ func SameHostRedirectPolicy() RedirectPolicy {
 	}
 }
 
-// AllowedHostRedirectPolicy allows redirect only if the redirected host
-// match one of the host that specified.
+// AllowedHostRedirectPolicy allows redirects only to one of the specified hosts.
+// AllowedHostRedirectPolicy 仅允许重定向到指定主机名之一。
 func AllowedHostRedirectPolicy(hosts ...string) RedirectPolicy {
 	m := make(map[string]struct{})
 	for _, h := range hosts {
@@ -74,8 +80,8 @@ func AllowedHostRedirectPolicy(hosts ...string) RedirectPolicy {
 	}
 }
 
-// AllowedDomainRedirectPolicy allows redirect only if the redirected domain
-// match one of the domain that specified.
+// AllowedDomainRedirectPolicy allows redirects only to one of the specified derived domains.
+// AllowedDomainRedirectPolicy 仅允许重定向到指定的派生域名之一。
 func AllowedDomainRedirectPolicy(hosts ...string) RedirectPolicy {
 	domains := make(map[string]struct{})
 	for _, h := range hosts {
@@ -118,6 +124,9 @@ func getDomain(host string) string {
 // For example:
 //
 //	client.SetRedirectPolicy(req.AlwaysCopyHeaderRedirectPolicy("Authorization"))
+//
+// AlwaysCopyHeaderRedirectPolicy 会在重定向时从初始请求复制指定 Header；
+// 即使目标不同也会复制敏感 Header，调用方必须自行确认安全边界。
 func AlwaysCopyHeaderRedirectPolicy(headers ...string) RedirectPolicy {
 	return func(req *http.Request, via []*http.Request) error {
 		for _, header := range headers {
@@ -146,6 +155,8 @@ func AlwaysCopyHeaderRedirectPolicy(headers ...string) RedirectPolicy {
 // For example:
 //
 //	client.SetRedirectPolicy(req.SensitiveHeadersRedirectPolicy("X-API-Key", "X-Auth-Token"))
+//
+// SensitiveHeadersRedirectPolicy 在重定向到不同派生域名时移除指定的敏感 Header。
 func SensitiveHeadersRedirectPolicy(headers ...string) RedirectPolicy {
 	return func(req *http.Request, via []*http.Request) error {
 		if len(via) == 0 {

@@ -6,7 +6,8 @@
 
 | 阶段 | 文档 | 解决的问题 |
 | --- | --- | --- |
-| 第一次使用 | [快速入门](01-getting-started.md) | 安装、首个请求、结果解析和 client 复用 |
+| Go 零基础 / 第一次使用这个 fork | [Go 与 req 零基础入门](00-go-req-beginner.md) | 从空目录开始，学习 Go 基础、首个请求、业务 Client 和本地测试 |
+| 已有 Go module / 快速查用法 | [快速入门](01-getting-started.md) | 安装、首个请求、结果解析和 client 复用 |
 | 理解模型 | [Client、Request 与 Response](02-client-request-response.md) | 三个核心对象的生命周期和覆盖关系 |
 | 写业务请求 | [构建请求](03-building-requests.md) | URL、参数、Header、Body、表单和结果类型 |
 | 生产可靠性 | [错误处理](04-error-handling.md)、[超时、重试与 Context](06-timeout-retry-context.md) | 区分网络错误与 HTTP 错误，控制取消和重试 |
@@ -31,6 +32,7 @@
 
 [examples](examples/README.md) 覆盖：
 
+- beginner
 - basic
 - production-client
 - auth-cookie

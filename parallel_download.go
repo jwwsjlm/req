@@ -150,26 +150,36 @@ func (pd *ParallelDownload) ensure() error {
 	return nil
 }
 
+// SetSegmentSize sets the size in bytes of each ranged download segment.
+// SetSegmentSize 设置每个分段下载区间的字节数；非正值会在 Do 中恢复为默认值。
 func (pd *ParallelDownload) SetSegmentSize(segmentSize int64) *ParallelDownload {
 	pd.segmentSize = segmentSize
 	return pd
 }
 
+// SetTempRootDir sets the parent directory used for temporary segment files.
+// SetTempRootDir 设置分段临时文件目录的父目录；空值会在 Do 中使用系统临时目录。
 func (pd *ParallelDownload) SetTempRootDir(tempRootDir string) *ParallelDownload {
 	pd.tempRootDir = tempRootDir
 	return pd
 }
 
+// SetFileMode sets the permission bits used when creating the output file.
+// SetFileMode 设置创建输出文件时使用的权限位；零值会在 Do 中使用默认权限。
 func (pd *ParallelDownload) SetFileMode(perm os.FileMode) *ParallelDownload {
 	pd.perm = perm
 	return pd
 }
 
+// SetConcurrency sets the number of concurrent segment workers.
+// SetConcurrency 设置并发分段 worker 数；非正值会在 Do 中恢复为默认值。
 func (pd *ParallelDownload) SetConcurrency(concurrency int) *ParallelDownload {
 	pd.concurrency = concurrency
 	return pd
 }
 
+// SetOutput writes the merged download to output when output is non-nil.
+// SetOutput 在 output 非 nil 时将合并后的下载内容写入该 writer。
 func (pd *ParallelDownload) SetOutput(output io.Writer) *ParallelDownload {
 	if output != nil {
 		pd.output = output
@@ -177,6 +187,8 @@ func (pd *ParallelDownload) SetOutput(output io.Writer) *ParallelDownload {
 	return pd
 }
 
+// SetOutputFile sets the destination filename used when no output writer is configured.
+// SetOutputFile 设置未配置输出 writer 时使用的目标文件名。
 func (pd *ParallelDownload) SetOutputFile(filename string) *ParallelDownload {
 	pd.filename = filename
 	return pd
@@ -266,6 +278,8 @@ func (pd *ParallelDownload) mergeFile() {
 	}
 }
 
+// Do downloads the resource with ranged requests, merges the segments, and honors an optional context.
+// Do 使用 Range 请求并行下载并合并各分段，同时遵循可选的 context；服务端必须提供有效的 Content-Length。
 func (pd *ParallelDownload) Do(ctx ...context.Context) error {
 	err := pd.ensure()
 	if err != nil {

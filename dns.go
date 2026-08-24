@@ -40,43 +40,51 @@ var (
 )
 
 // SetDNSResolver sets the resolver used by default dialing and HTTP/3.
+// SetDNSResolver 为默认拨号和 HTTP/3 配置域名解析器。
 func (c *Client) SetDNSResolver(resolver *net.Resolver) *Client {
 	c.Transport.SetDNSResolver(resolver)
 	return c
 }
 
 // SetDNSOverTLS configures DNS-over-TLS with the given provider.
+// SetDNSOverTLS 使用给定的上游提供方配置 DNS-over-TLS。
 func (c *Client) SetDNSOverTLS(provider DNSOverTLSProvider) *Client {
 	c.Transport.SetDNSOverTLS(provider)
 	return c
 }
 
 // SetDNSOverTLSCloudflare configures Cloudflare DNS-over-TLS.
+// SetDNSOverTLSCloudflare 配置 Cloudflare DNS-over-TLS。
 func (c *Client) SetDNSOverTLSCloudflare() *Client {
 	return c.SetDNSOverTLS(DNSOverTLSCloudflare)
 }
 
 // SetDNSOverTLSGoogle configures Google DNS-over-TLS.
+// SetDNSOverTLSGoogle 配置 Google DNS-over-TLS。
 func (c *Client) SetDNSOverTLSGoogle() *Client {
 	return c.SetDNSOverTLS(DNSOverTLSGoogle)
 }
 
 // SetDNSOverTLSQuad9 configures Quad9 DNS-over-TLS.
+// SetDNSOverTLSQuad9 配置 Quad9 DNS-over-TLS。
 func (c *Client) SetDNSOverTLSQuad9() *Client {
 	return c.SetDNSOverTLS(DNSOverTLSQuad9)
 }
 
 // SetDNSOverTLSAdGuard configures AdGuard DNS-over-TLS.
+// SetDNSOverTLSAdGuard 配置 AdGuard DNS-over-TLS。
 func (c *Client) SetDNSOverTLSAdGuard() *Client {
 	return c.SetDNSOverTLS(DNSOverTLSAdGuard)
 }
 
 // SetDNSOverTLSAli configures AliDNS DNS-over-TLS.
+// SetDNSOverTLSAli 配置阿里云公共 DNS 的 DNS-over-TLS。
 func (c *Client) SetDNSOverTLSAli() *Client {
 	return c.SetDNSOverTLS(DNSOverTLSAli)
 }
 
 // SetDNSResolver sets the resolver used by default dialing and HTTP/3.
+// SetDNSResolver 为默认拨号和 HTTP/3 配置域名解析器。
 func (t *Transport) SetDNSResolver(resolver *net.Resolver) *Transport {
 	t.Resolver = resolver
 	if t.t3 != nil {
@@ -86,36 +94,43 @@ func (t *Transport) SetDNSResolver(resolver *net.Resolver) *Transport {
 }
 
 // SetDNSOverTLS configures DNS-over-TLS with the given provider.
+// SetDNSOverTLS 使用给定的上游提供方配置 DNS-over-TLS。
 func (t *Transport) SetDNSOverTLS(provider DNSOverTLSProvider) *Transport {
 	return t.SetDNSResolver(NewDNSOverTLSResolver(provider))
 }
 
 // SetDNSOverTLSCloudflare configures Cloudflare DNS-over-TLS.
+// SetDNSOverTLSCloudflare 配置 Cloudflare DNS-over-TLS。
 func (t *Transport) SetDNSOverTLSCloudflare() *Transport {
 	return t.SetDNSOverTLS(DNSOverTLSCloudflare)
 }
 
 // SetDNSOverTLSGoogle configures Google DNS-over-TLS.
+// SetDNSOverTLSGoogle 配置 Google DNS-over-TLS。
 func (t *Transport) SetDNSOverTLSGoogle() *Transport {
 	return t.SetDNSOverTLS(DNSOverTLSGoogle)
 }
 
 // SetDNSOverTLSQuad9 configures Quad9 DNS-over-TLS.
+// SetDNSOverTLSQuad9 配置 Quad9 DNS-over-TLS。
 func (t *Transport) SetDNSOverTLSQuad9() *Transport {
 	return t.SetDNSOverTLS(DNSOverTLSQuad9)
 }
 
 // SetDNSOverTLSAdGuard configures AdGuard DNS-over-TLS.
+// SetDNSOverTLSAdGuard 配置 AdGuard DNS-over-TLS。
 func (t *Transport) SetDNSOverTLSAdGuard() *Transport {
 	return t.SetDNSOverTLS(DNSOverTLSAdGuard)
 }
 
 // SetDNSOverTLSAli configures AliDNS DNS-over-TLS.
+// SetDNSOverTLSAli 配置阿里云公共 DNS 的 DNS-over-TLS。
 func (t *Transport) SetDNSOverTLSAli() *Transport {
 	return t.SetDNSOverTLS(DNSOverTLSAli)
 }
 
 // NewDNSOverTLSResolver creates a net.Resolver that resolves names through DoT.
+// NewDNSOverTLSResolver 创建一个通过 DoT 解析域名的 net.Resolver。
 func NewDNSOverTLSResolver(provider DNSOverTLSProvider) *net.Resolver {
 	return &net.Resolver{
 		PreferGo: true,

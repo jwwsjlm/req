@@ -26,6 +26,8 @@ var settingName = map[SettingID]string{
 	SettingMaxHeaderListSize:    "MAX_HEADER_LIST_SIZE",
 }
 
+// String returns the standard name of the setting ID or an UNKNOWN_SETTING value.
+// String 返回设置 ID 的标准名称；未知 ID 返回 UNKNOWN_SETTING 形式的名称。
 func (s SettingID) String() string {
 	if v, ok := settingName[s]; ok {
 		return v
@@ -43,6 +45,8 @@ type Setting struct {
 	Val uint32
 }
 
+// String formats the setting as its ID and numeric value.
+// String 将设置格式化为 ID 与数值组成的字符串。
 func (s Setting) String() string {
 	return fmt.Sprintf("[%v = %d]", s.ID, s.Val)
 }

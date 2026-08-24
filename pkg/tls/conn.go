@@ -14,6 +14,7 @@ import (
 type Conn interface {
 	net.Conn
 	// ConnectionState returns basic TLS details about the connection.
+	// ConnectionState 返回连接的基本 TLS 状态信息。
 	ConnectionState() tls.ConnectionState
 	// Handshake runs the client or server handshake
 	// protocol if it has not yet been run.
@@ -23,6 +24,8 @@ type Conn interface {
 	//
 	// For control over canceling or setting a timeout on a handshake, use
 	// HandshakeContext or the Dialer's DialContext method instead.
+	//
+	// Handshake 在尚未握手时执行客户端或服务端 TLS 握手；通常首次读写会自动触发。
 	Handshake() error
 
 	// HandshakeContext runs the client or server handshake
@@ -35,5 +38,7 @@ type Conn interface {
 	//
 	// Most uses of this package need not call HandshakeContext explicitly: the
 	// first Read or Write will call it automatically.
+	//
+	// HandshakeContext 使用非 nil context 执行 TLS 握手，并可在握手完成前取消。
 	HandshakeContext(ctx context.Context) error
 }

@@ -33,11 +33,15 @@ import (
 )
 
 // DefaultClient returns the global default Client.
+//
+// DefaultClient 返回包级默认 Client，供包级请求辅助函数复用。
 func DefaultClient() *Client {
 	return defaultClient
 }
 
-// SetDefaultClient override the global default Client.
+// SetDefaultClient overrides the global default Client.
+//
+// SetDefaultClient 将 c 设为包级默认 Client；后续包级请求辅助函数都使用该实例。
 func SetDefaultClient(c *Client) {
 	if c != nil {
 		defaultClient = c
@@ -47,6 +51,8 @@ func SetDefaultClient(c *Client) {
 var defaultClient = C()
 
 // Client is the req's http client.
+//
+// Client 表示 req 的 HTTP 客户端，并保存可被 Request 继承的默认配置。
 type Client struct {
 	BaseURL               string
 	PathParams            map[string]string
@@ -85,9 +91,14 @@ type Client struct {
 	browserProfile          *browserHeaderProfile
 }
 
+// ErrorHook is called when a Client request finishes with an error.
+//
+// ErrorHook 定义在客户端请求处理失败时调用的回调函数。
 type ErrorHook func(client *Client, req *Request, resp *Response, err error)
 
-// R create a new request.
+// R creates a new request.
+//
+// R 创建关联到此 Client 的新 Request，并复制当前默认重试选项。
 func (c *Client) R() *Request {
 	return &Request{
 		client:      c,
@@ -96,6 +107,8 @@ func (c *Client) R() *Request {
 }
 
 // Get create a new GET request, accepts 0 or 1 url.
+//
+// Get 创建 GET Request；url 可省略或只提供一个，省略时由后续配置补充目标地址。
 func (c *Client) Get(url ...string) *Request {
 	r := c.R()
 	if len(url) > 0 {
@@ -105,7 +118,9 @@ func (c *Client) Get(url ...string) *Request {
 	return r
 }
 
-// Post create a new POST request.
+// Post creates a new POST request.
+//
+// Post 创建 POST Request；url 可省略或只提供一个，提供时将其设为原始请求 URL。
 func (c *Client) Post(url ...string) *Request {
 	r := c.R()
 	if len(url) > 0 {
@@ -115,7 +130,9 @@ func (c *Client) Post(url ...string) *Request {
 	return r
 }
 
-// Patch create a new PATCH request.
+// Patch creates a new PATCH request.
+//
+// Patch 创建 PATCH Request；url 可省略或只提供一个，提供时将其设为原始请求 URL。
 func (c *Client) Patch(url ...string) *Request {
 	r := c.R()
 	if len(url) > 0 {
@@ -125,7 +142,9 @@ func (c *Client) Patch(url ...string) *Request {
 	return r
 }
 
-// Delete create a new DELETE request.
+// Delete creates a new DELETE request.
+//
+// Delete 创建 DELETE Request；url 可省略或只提供一个，提供时将其设为原始请求 URL。
 func (c *Client) Delete(url ...string) *Request {
 	r := c.R()
 	if len(url) > 0 {
@@ -135,7 +154,9 @@ func (c *Client) Delete(url ...string) *Request {
 	return r
 }
 
-// Put create a new PUT request.
+// Put creates a new PUT request.
+//
+// Put 创建 PUT Request；url 可省略或只提供一个，提供时将其设为原始请求 URL。
 func (c *Client) Put(url ...string) *Request {
 	r := c.R()
 	if len(url) > 0 {
@@ -145,7 +166,9 @@ func (c *Client) Put(url ...string) *Request {
 	return r
 }
 
-// Head create a new HEAD request.
+// Head creates a new HEAD request.
+//
+// Head 创建 HEAD Request；url 可省略或只提供一个，提供时将其设为原始请求 URL。
 func (c *Client) Head(url ...string) *Request {
 	r := c.R()
 	if len(url) > 0 {
@@ -155,7 +178,9 @@ func (c *Client) Head(url ...string) *Request {
 	return r
 }
 
-// Options create a new OPTIONS request.
+// Options creates a new OPTIONS request.
+//
+// Options 创建 OPTIONS Request；url 可省略或只提供一个，提供时将其设为原始请求 URL。
 func (c *Client) Options(url ...string) *Request {
 	r := c.R()
 	if len(url) > 0 {
@@ -165,32 +190,39 @@ func (c *Client) Options(url ...string) *Request {
 	return r
 }
 
-// GetTransport return the underlying transport.
+// GetTransport returns the underlying transport.
+//
+// GetTransport 返回此 Client 使用的底层 Transport。
 func (c *Client) GetTransport() *Transport {
 	return c.Transport
 }
 
-// SetResponseBodyTransformer set the response body transformer, which can modify the
-// response body before unmarshalled if auto-read response body is not disabled.
+// SetResponseBodyTransformer sets a response body transformer. When automatic response
+// body reading is enabled, it runs before the body is unmarshaled.
+//
+// SetResponseBodyTransformer 设置响应正文转换函数；未禁用自动读取时，转换在响应体自动反序列化之前执行。
 func (c *Client) SetResponseBodyTransformer(fn func(rawBody []byte, req *Request, resp *Response) (transformedBody []byte, err error)) *Client {
 	c.responseBodyTransformer = fn
 	return c
 }
 
-// SetCommonError set the common result that response body will be unmarshalled to
-// if no error occurs but Response.ResultState returns ErrorState, by default it
-// is HTTP status `code >= 400`, you can also use SetCommonResultStateChecker
-// to customize the result state check logic.
+// SetCommonError sets the default result into which a response body is unmarshaled
+// when no request error occurs but Response.ResultState is ErrorState. By default,
+// status codes greater than or equal to 400 are errors; use SetResultStateCheckFunc
+// to customize the result-state logic.
 //
+// SetCommonError 设置默认错误结果接收对象；请求无 Go error 但结果状态为 ErrorState 时将响应体反序列化到该对象。
 // Deprecated: Use SetCommonErrorResult instead.
 func (c *Client) SetCommonError(err any) *Client {
 	return c.SetCommonErrorResult(err)
 }
 
-// SetCommonErrorResult set the common result that response body will be unmarshalled to
-// if no error occurs but Response.ResultState returns ErrorState, by default it
-// is HTTP status `code >= 400`, you can also use SetCommonResultStateChecker
-// to customize the result state check logic.
+// SetCommonErrorResult sets the default result into which a response body is unmarshaled
+// when no request error occurs but Response.ResultState is ErrorState. By default,
+// status codes greater than or equal to 400 are errors; use SetResultStateCheckFunc
+// to customize the result-state logic.
+//
+// SetCommonErrorResult 设置默认错误结果接收对象；请求无 Go error 但结果状态为 ErrorState 时将响应体反序列化到该对象。
 func (c *Client) SetCommonErrorResult(err any) *Client {
 	if err != nil {
 		c.commonErrorType = util.GetType(err)
@@ -199,6 +231,8 @@ func (c *Client) SetCommonErrorResult(err any) *Client {
 }
 
 // ResultState represents the state of the result.
+//
+// ResultState 表示响应处理后的结果状态。
 type ResultState int
 
 const (
@@ -219,13 +253,17 @@ const (
 // SetResultStateCheckFunc overrides the default result state checker with customized one,
 // which returns SuccessState when HTTP status `code >= 200 and <= 299`, and returns
 // ErrorState when HTTP status `code >= 400`, otherwise returns UnknownState.
+//
+// SetResultStateCheckFunc 设置结果状态判定函数，替换默认的 2xx 为成功、4xx 及以上为错误、其余为未知的规则。
 func (c *Client) SetResultStateCheckFunc(fn func(resp *Response) ResultState) *Client {
 	c.resultStateCheckFunc = fn
 	return c
 }
 
-// SetCommonFormDataFromValues set the form data from url.Values for requests
+// SetCommonFormDataFromValues sets the form data from url.Values for requests
 // fired from the client which request method allows payload.
+//
+// SetCommonFormDataFromValues 为此 Client 创建的允许携带请求体的 Request 设置默认表单字段，字段来自 url.Values。
 func (c *Client) SetCommonFormDataFromValues(data urlpkg.Values) *Client {
 	if c.FormData == nil {
 		c.FormData = urlpkg.Values{}
@@ -238,8 +276,10 @@ func (c *Client) SetCommonFormDataFromValues(data urlpkg.Values) *Client {
 	return c
 }
 
-// SetCommonFormData set the form data from map for requests fired from the client
+// SetCommonFormData sets the form data from map for requests fired from the client
 // which request method allows payload.
+//
+// SetCommonFormData 为此 Client 创建的允许携带请求体的 Request 设置默认字符串表单字段。
 func (c *Client) SetCommonFormData(data map[string]string) *Client {
 	if c.FormData == nil {
 		c.FormData = urlpkg.Values{}
@@ -251,6 +291,8 @@ func (c *Client) SetCommonFormData(data map[string]string) *Client {
 }
 
 // SetCommonFormDataAnyType sets form data from a map whose values can be any type.
+//
+// SetCommonFormDataAnyType 为此 Client 创建的允许携带请求体的 Request 设置默认表单字段，并用 fmt.Sprint 转换任意类型的值。
 func (c *Client) SetCommonFormDataAnyType(data map[string]any) *Client {
 	if c.FormData == nil {
 		c.FormData = urlpkg.Values{}
@@ -262,6 +304,8 @@ func (c *Client) SetCommonFormDataAnyType(data map[string]any) *Client {
 }
 
 // SetCommonFormDataAny is an alias of SetCommonFormDataAnyType.
+//
+// SetCommonFormDataAny 是 SetCommonFormDataAnyType 的别名，使用 fmt.Sprint 转换表单值。
 func (c *Client) SetCommonFormDataAny(data map[string]any) *Client {
 	return c.SetCommonFormDataAnyType(data)
 }
@@ -272,26 +316,34 @@ func (c *Client) SetCommonFormDataAny(data map[string]any) *Client {
 //
 // Boundary delimiter may only contain certain ASCII characters, and must be
 // non-empty and at most 70 bytes long (see RFC 2046, Section 5.1.1).
+//
+// SetMultipartBoundaryFunc 设置 multipart/form-data 边界生成函数；返回值不得为空、最长 70 字节，且只能含 RFC 2046 允许的 ASCII 字符。
 func (c *Client) SetMultipartBoundaryFunc(fn func() string) *Client {
 	c.multipartBoundaryFunc = fn
 	return c
 }
 
-// SetBaseURL set the default base URL, will be used if request URL is
+// SetBaseURL sets the default base URL, will be used if request URL is
 // a relative URL.
+//
+// SetBaseURL 设置默认基础 URL；Request 使用相对 URL 时以它为基准解析。
 func (c *Client) SetBaseURL(u string) *Client {
 	c.BaseURL = strings.TrimRight(u, "/")
 	return c
 }
 
-// SetOutputDirectory set output directory that response will
+// SetOutputDirectory sets output directory that response will
 // be downloaded to.
+//
+// SetOutputDirectory 设置下载响应正文时使用的默认输出目录。
 func (c *Client) SetOutputDirectory(dir string) *Client {
 	c.outputDirectory = dir
 	return c
 }
 
 // SetCertFromFile helps to set client certificates from cert and key file.
+//
+// SetCertFromFile 从证书文件和私钥文件加载客户端 TLS 证书。
 func (c *Client) SetCertFromFile(certFile, keyFile string) *Client {
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
@@ -303,7 +355,9 @@ func (c *Client) SetCertFromFile(certFile, keyFile string) *Client {
 	return c
 }
 
-// SetCerts set client certificates.
+// SetCerts sets client certificates.
+//
+// SetCerts 设置 Client 在 TLS 握手中使用的客户端证书。
 func (c *Client) SetCerts(certs ...tls.Certificate) *Client {
 	config := c.GetTLSClientConfig()
 	config.Certificates = append(config.Certificates, certs...)
@@ -318,13 +372,17 @@ func (c *Client) appendRootCertData(data []byte) {
 	config.RootCAs.AppendCertsFromPEM(data)
 }
 
-// SetRootCertFromString set root certificates from string.
+// SetRootCertFromString sets root certificates from string.
+//
+// SetRootCertFromString 从 PEM 字符串加载并添加受信任的根证书。
 func (c *Client) SetRootCertFromString(pemContent string) *Client {
 	c.appendRootCertData([]byte(pemContent))
 	return c
 }
 
-// SetRootCertsFromFile set root certificates from files.
+// SetRootCertsFromFile sets root certificates from files.
+//
+// SetRootCertsFromFile 从一个或多个 PEM 文件加载并添加受信任的根证书。
 func (c *Client) SetRootCertsFromFile(pemFiles ...string) *Client {
 	for _, pemFile := range pemFiles {
 		rootPemData, err := os.ReadFile(pemFile)
@@ -337,7 +395,9 @@ func (c *Client) SetRootCertsFromFile(pemFiles ...string) *Client {
 	return c
 }
 
-// GetTLSClientConfig return the underlying tls.Config.
+// GetTLSClientConfig returns the underlying tls.Config.
+//
+// GetTLSClientConfig 返回此 Client 当前使用的底层 tls.Config。
 func (c *Client) GetTLSClientConfig() *tls.Config {
 	if c.TLSClientConfig == nil {
 		c.Transport.SetTLSClientConfig(&tls.Config{
@@ -347,10 +407,12 @@ func (c *Client) GetTLSClientConfig() *tls.Config {
 	return c.TLSClientConfig
 }
 
-// SetRedirectPolicy set the RedirectPolicy which controls the behavior of receiving redirect
+// SetRedirectPolicy sets the RedirectPolicy which controls the behavior of receiving redirect
 // responses (usually responses with 301 and 302 status code), see the predefined
 // AllowedDomainRedirectPolicy, AllowedHostRedirectPolicy, DefaultRedirectPolicy, MaxRedirectPolicy,
 // NoRedirectPolicy, SameDomainRedirectPolicy and SameHostRedirectPolicy.
+//
+// SetRedirectPolicy 设置处理重定向响应的策略；可组合域名、主机、最大次数或禁止重定向等 RedirectPolicy。
 func (c *Client) SetRedirectPolicy(policies ...RedirectPolicy) *Client {
 	if len(policies) == 0 {
 		return c
@@ -373,17 +435,21 @@ func (c *Client) SetRedirectPolicy(policies ...RedirectPolicy) *Client {
 	return c
 }
 
-// DisableKeepAlives disable the HTTP keep-alives (enabled by default)
+// DisableKeepAlives disables the HTTP keep-alives (enabled by default)
 // and will only use the connection to the server for a single
 // HTTP request.
 //
 // This is unrelated to the similarly named TCP keep-alives.
+//
+// DisableKeepAlives 关闭 HTTP keep-alive，使每条连接最多服务一次 HTTP 请求；这与 TCP keep-alive 无关。
 func (c *Client) DisableKeepAlives() *Client {
 	c.Transport.DisableKeepAlives = true
 	return c
 }
 
 // EnableKeepAlives enables HTTP keep-alives (enabled by default).
+//
+// EnableKeepAlives 启用 HTTP keep-alive；这是默认行为，可复用空闲连接。
 func (c *Client) EnableKeepAlives() *Client {
 	c.Transport.DisableKeepAlives = false
 	return c
@@ -397,56 +463,71 @@ func (c *Client) EnableKeepAlives() *Client {
 // response, it's transparently decoded in the Response.Body.
 // However, if the user explicitly requested gzip it is not
 // automatically uncompressed.
+//
+// DisableCompression 关闭 gzip 响应的自动协商；Transport 不再自动加入 Accept-Encoding: gzip，
+// 也不会自动解压原本由它主动协商得到的 gzip 响应。
 func (c *Client) DisableCompression() *Client {
 	c.Transport.DisableCompression = true
 	return c
 }
 
 // EnableCompression enables the compression (enabled by default).
+//
+// EnableCompression 启用 Transport 自动请求并透明解压 gzip 响应；这是默认行为。
 func (c *Client) EnableCompression() *Client {
 	c.Transport.DisableCompression = false
 	return c
 }
 
 // EnableAutoDecompress enables the automatic decompression (disabled by default).
+//
+// EnableAutoDecompress 启用响应正文的自动解压；默认关闭。
 func (c *Client) EnableAutoDecompress() *Client {
 	c.Transport.AutoDecompression = true
 	return c
 }
 
 // DisableAutoDecompress disables the automatic decompression (disabled by default).
+//
+// DisableAutoDecompress 关闭响应正文的自动解压；默认即为关闭。
 func (c *Client) DisableAutoDecompress() *Client {
 	c.Transport.AutoDecompression = false
 	return c
 }
 
-// SetTLSClientConfig set the TLS client config. Be careful! Usually
-// you don't need this, you can directly set the tls configuration with
-// methods like EnableInsecureSkipVerify, SetCerts etc. Or you can call
-// GetTLSClientConfig to get the current tls configuration to avoid
-// overwriting some important configurations, such as not setting NextProtos
-// will not use http2 by default.
+// SetTLSClientConfig sets the TLS client configuration. Usually it is safer to
+// configure TLS through methods such as EnableInsecureSkipVerify or SetCerts, or
+// to start with GetTLSClientConfig, so important settings are not overwritten.
+// For example, omitting NextProtos prevents HTTP/2 from being used by default.
+//
+// SetTLSClientConfig 设置底层 TLS 配置；直接替换配置可能丢失 ALPN 等已有设置，从而影响 HTTP/2。
 func (c *Client) SetTLSClientConfig(conf *tls.Config) *Client {
 	c.Transport.SetTLSClientConfig(conf)
 	return c
 }
 
-// EnableInsecureSkipVerify enable send https without verifying
+// EnableInsecureSkipVerify enables send https without verifying
 // the server's certificates (disabled by default).
+//
+// EnableInsecureSkipVerify 启用跳过 HTTPS 服务端证书校验；默认关闭，仅应在受控测试环境使用。
 func (c *Client) EnableInsecureSkipVerify() *Client {
 	c.GetTLSClientConfig().InsecureSkipVerify = true
 	return c
 }
 
-// DisableInsecureSkipVerify disable send https without verifying
+// DisableInsecureSkipVerify disables send https without verifying
 // the server's certificates (disabled by default).
+//
+// DisableInsecureSkipVerify 关闭跳过 HTTPS 服务端证书校验，恢复正常证书验证。
 func (c *Client) DisableInsecureSkipVerify() *Client {
 	c.GetTLSClientConfig().InsecureSkipVerify = false
 	return c
 }
 
-// SetCommonQueryParams set URL query parameters with a map
+// SetCommonQueryParams sets URL query parameters with a map
 // for requests fired from the client.
+//
+// SetCommonQueryParams 为此 Client 创建的 Request 设置默认 URL Query 参数；每个键只保留 map 中给出的值。
 func (c *Client) SetCommonQueryParams(params map[string]string) *Client {
 	for k, v := range params {
 		c.SetCommonQueryParam(k, v)
@@ -454,8 +535,10 @@ func (c *Client) SetCommonQueryParams(params map[string]string) *Client {
 	return c
 }
 
-// AddCommonQueryParam add a URL query parameter with a key-value
+// AddCommonQueryParam adds a URL query parameter with a key-value
 // pair for requests fired from the client.
+//
+// AddCommonQueryParam 为此 Client 创建的 Request 追加一个默认 URL Query 键值对，不清除同名已有值。
 func (c *Client) AddCommonQueryParam(key, value string) *Client {
 	if c.QueryParams == nil {
 		c.QueryParams = make(urlpkg.Values)
@@ -464,8 +547,10 @@ func (c *Client) AddCommonQueryParam(key, value string) *Client {
 	return c
 }
 
-// AddCommonQueryParams add one or more values of specified URL query parameter
+// AddCommonQueryParams adds one or more values of specified URL query parameter
 // for requests fired from the client.
+//
+// AddCommonQueryParams 为此 Client 创建的 Request 为指定 Query 键追加一个或多个默认值。
 func (c *Client) AddCommonQueryParams(key string, values ...string) *Client {
 	if c.QueryParams == nil {
 		c.QueryParams = make(urlpkg.Values)
@@ -477,6 +562,8 @@ func (c *Client) AddCommonQueryParams(key string, values ...string) *Client {
 }
 
 // SetCommonQueryParamAny sets a query parameter value converted from any type with fmt.Sprint.
+//
+// SetCommonQueryParamAny 为此 Client 创建的 Request 设置一个默认 Query 参数，并用 fmt.Sprint 转换 value。
 func (c *Client) SetCommonQueryParamAny(key string, value any) *Client {
 	return c.SetCommonQueryParam(key, fmt.Sprint(value))
 }
@@ -488,18 +575,24 @@ func (c *Client) pathParams() map[string]string {
 	return c.PathParams
 }
 
-// SetCommonPathParam set a path parameter for requests fired from the client.
+// SetCommonPathParam sets a path parameter for requests fired from the client.
+//
+// SetCommonPathParam 为此 Client 创建的 Request 设置默认路径参数；普通路径参数会进行 URL 路径转义。
 func (c *Client) SetCommonPathParam(key, value string) *Client {
 	c.pathParams()[key] = value
 	return c
 }
 
 // SetCommonPathParamAny sets a path parameter value converted from any type with fmt.Sprint.
+//
+// SetCommonPathParamAny 为此 Client 创建的 Request 设置默认路径参数，并用 fmt.Sprint 转换 value 后进行路径转义。
 func (c *Client) SetCommonPathParamAny(key string, value any) *Client {
 	return c.SetCommonPathParam(key, fmt.Sprint(value))
 }
 
-// SetCommonPathParams set path parameters for requests fired from the client.
+// SetCommonPathParams sets path parameters for requests fired from the client.
+//
+// SetCommonPathParams 为此 Client 创建的 Request 批量设置默认路径参数；值会进行 URL 路径转义。
 func (c *Client) SetCommonPathParams(pathParams map[string]string) *Client {
 	m := c.pathParams()
 	for k, v := range pathParams {
@@ -516,17 +609,23 @@ func (c *Client) rawPathParams() map[string]string {
 }
 
 // SetCommonPathRawParam sets a path parameter without url.PathEscape.
+//
+// SetCommonPathRawParam 为此 Client 创建的 Request 设置未经 url.PathEscape 处理的默认路径参数。
 func (c *Client) SetCommonPathRawParam(key, value string) *Client {
 	c.rawPathParams()[key] = value
 	return c
 }
 
 // SetCommonPathRawParamAny sets a raw path parameter value converted from any type with fmt.Sprint.
+//
+// SetCommonPathRawParamAny 为此 Client 创建的 Request 设置未经路径转义的默认路径参数，并用 fmt.Sprint 转换 value。
 func (c *Client) SetCommonPathRawParamAny(key string, value any) *Client {
 	return c.SetCommonPathRawParam(key, fmt.Sprint(value))
 }
 
 // SetCommonPathRawParams sets multiple path parameters without url.PathEscape.
+//
+// SetCommonPathRawParams 为此 Client 创建的 Request 批量设置未经 url.PathEscape 处理的默认路径参数。
 func (c *Client) SetCommonPathRawParams(pathParams map[string]string) *Client {
 	m := c.rawPathParams()
 	for k, v := range pathParams {
@@ -535,8 +634,10 @@ func (c *Client) SetCommonPathRawParams(pathParams map[string]string) *Client {
 	return c
 }
 
-// SetCommonQueryParam set a URL query parameter with a key-value
+// SetCommonQueryParam sets a URL query parameter with a key-value
 // pair for requests fired from the client.
+//
+// SetCommonQueryParam 为此 Client 创建的 Request 设置一个默认 URL Query 键值对；同名默认值会被覆盖。
 func (c *Client) SetCommonQueryParam(key, value string) *Client {
 	if c.QueryParams == nil {
 		c.QueryParams = make(urlpkg.Values)
@@ -545,8 +646,10 @@ func (c *Client) SetCommonQueryParam(key, value string) *Client {
 	return c
 }
 
-// SetCommonQueryString set URL query parameters with a raw query string
+// SetCommonQueryString sets URL query parameters with a raw query string
 // for requests fired from the client.
+//
+// SetCommonQueryString 为此 Client 创建的 Request 设置由原始 query string 解析出的默认 URL Query 参数。
 func (c *Client) SetCommonQueryString(query string) *Client {
 	params, err := urlpkg.ParseQuery(strings.TrimSpace(query))
 	if err != nil {
@@ -564,8 +667,10 @@ func (c *Client) SetCommonQueryString(query string) *Client {
 	return c
 }
 
-// SetCommonQueryParamsFromValues set URL query parameters from a url.Values map
+// SetCommonQueryParamsFromValues sets URL query parameters from a url.Values map
 // for requests fired from the client.
+//
+// SetCommonQueryParamsFromValues 为此 Client 创建的 Request 从 url.Values 批量设置默认 URL Query 参数。
 func (c *Client) SetCommonQueryParamsFromValues(params urlpkg.Values) *Client {
 	if c.QueryParams == nil {
 		c.QueryParams = make(urlpkg.Values)
@@ -578,8 +683,10 @@ func (c *Client) SetCommonQueryParamsFromValues(params urlpkg.Values) *Client {
 	return c
 }
 
-// SetCommonQueryParamsFromStruct set URL query parameters from a struct using go-querystring
+// SetCommonQueryParamsFromStruct sets URL query parameters from a struct using go-querystring
 // for requests fired from the client.
+//
+// SetCommonQueryParamsFromStruct 为此 Client 创建的 Request 从 struct 生成默认 URL Query 参数，编码规则由 go-querystring 决定。
 func (c *Client) SetCommonQueryParamsFromStruct(v any) *Client {
 	values, err := query.Values(v)
 	if err != nil {
@@ -589,19 +696,25 @@ func (c *Client) SetCommonQueryParamsFromStruct(v any) *Client {
 	return c.SetCommonQueryParamsFromValues(values)
 }
 
-// SetCommonCookies set HTTP cookies for requests fired from the client.
+// SetCommonCookies sets HTTP cookies for requests fired from the client.
+//
+// SetCommonCookies 为此 Client 创建的 Request 设置默认 HTTP Cookie。
 func (c *Client) SetCommonCookies(cookies ...*http.Cookie) *Client {
 	c.Cookies = append(c.Cookies, cookies...)
 	return c
 }
 
-// DisableDebugLog disable debug level log (disabled by default).
+// DisableDebugLog disables debug level log (disabled by default).
+//
+// DisableDebugLog 关闭调试级别日志；默认即为关闭。
 func (c *Client) DisableDebugLog() *Client {
 	c.DebugLog = false
 	return c
 }
 
-// EnableDebugLog enable debug level log (disabled by default).
+// EnableDebugLog enables debug level log (disabled by default).
+//
+// EnableDebugLog 启用调试级别日志；默认关闭。
 func (c *Client) EnableDebugLog() *Client {
 	c.DebugLog = true
 	return c
@@ -611,14 +724,18 @@ func (c *Client) EnableDebugLog() *Client {
 // 1. Dump content of all requests and responses to see details.
 // 2. Output debug level log for deeper insights.
 // 3. Trace all requests, so you can get trace info to analyze performance.
+//
+// DevMode 同时启用完整请求/响应 dump、调试级别日志和所有 Request 的 trace。
 func (c *Client) DevMode() *Client {
 	return c.EnableDumpAll().
 		EnableDebugLog().
 		EnableTraceAll()
 }
 
-// SetScheme set the default scheme for client, will be used when
+// SetScheme sets the default scheme for client, will be used when
 // there is no scheme in the request URL (e.g. "github.com/imroc/req").
+//
+// SetScheme 设置缺少 scheme 的 Request URL 使用的默认 scheme，例如为 github.com/imroc/req 补充 https。
 func (c *Client) SetScheme(scheme string) *Client {
 	if !util.IsStringEmpty(scheme) {
 		c.scheme = strings.TrimSpace(scheme)
@@ -626,7 +743,9 @@ func (c *Client) SetScheme(scheme string) *Client {
 	return c
 }
 
-// GetLogger return the internal logger, usually used in middleware.
+// GetLogger returns the internal logger, usually used in middleware.
+//
+// GetLogger 返回此 Client 的内部 Logger，通常供中间件记录日志。
 func (c *Client) GetLogger() Logger {
 	if c.log != nil {
 		return c.log
@@ -635,7 +754,9 @@ func (c *Client) GetLogger() Logger {
 	return c.log
 }
 
-// SetLogger set the customized logger for client, will disable log if set to nil.
+// SetLogger sets the customized logger for client, will disable log if set to nil.
+//
+// SetLogger 设置此 Client 的 Logger；传入 nil 会关闭日志输出。
 func (c *Client) SetLogger(log Logger) *Client {
 	if log == nil {
 		c.log = &disableLogger{}
@@ -645,7 +766,9 @@ func (c *Client) SetLogger(log Logger) *Client {
 	return c
 }
 
-// SetTimeout set timeout for requests fired from the client.
+// SetTimeout sets timeout for requests fired from the client.
+//
+// SetTimeout 设置此 Client 发起请求的默认超时时间。
 func (c *Client) SetTimeout(d time.Duration) *Client {
 	c.httpClient.Timeout = d
 	return c
@@ -658,8 +781,10 @@ func (c *Client) getDumpOptions() *DumpOptions {
 	return c.dumpOptions
 }
 
-// EnableDumpAll enable dump for requests fired from the client, including
+// EnableDumpAll enables dump for requests fired from the client, including
 // all content for the request and response by default.
+//
+// EnableDumpAll 为此 Client 的请求启用完整 dump，默认包含请求和响应的全部内容。
 func (c *Client) EnableDumpAll() *Client {
 	if c.Dump != nil { // dump already started
 		return c
@@ -668,8 +793,10 @@ func (c *Client) EnableDumpAll() *Client {
 	return c
 }
 
-// EnableDumpAllToFile enable dump for requests fired from the
+// EnableDumpAllToFile enables dump for requests fired from the
 // client and output to the specified file.
+//
+// EnableDumpAllToFile 为此 Client 的请求启用完整 dump，并写入指定文件。
 func (c *Client) EnableDumpAllToFile(filename string) *Client {
 	if c.Dump != nil {
 		c.DisableDump()
@@ -687,8 +814,10 @@ func (c *Client) EnableDumpAllToFile(filename string) *Client {
 	return c
 }
 
-// EnableDumpAllTo enable dump for requests fired from the
+// EnableDumpAllTo enables dump for requests fired from the
 // client and output to the specified io.Writer.
+//
+// EnableDumpAllTo 为此 Client 的请求启用完整 dump，并写入指定 io.Writer。
 func (c *Client) EnableDumpAllTo(output io.Writer) *Client {
 	c.closeDumpOutput()
 	c.getDumpOptions().Output = output
@@ -696,9 +825,11 @@ func (c *Client) EnableDumpAllTo(output io.Writer) *Client {
 	return c
 }
 
-// EnableDumpAllAsync enable dump for requests fired from the
+// EnableDumpAllAsync enables dump for requests fired from the
 // client and output asynchronously, can be used for debugging
 // in production environment without affecting performance.
+//
+// EnableDumpAllAsync 异步输出此 Client 请求的完整 dump，适合降低调试输出对请求路径的阻塞。
 func (c *Client) EnableDumpAllAsync() *Client {
 	o := c.getDumpOptions()
 	o.Async = true
@@ -706,9 +837,11 @@ func (c *Client) EnableDumpAllAsync() *Client {
 	return c
 }
 
-// EnableDumpAllWithoutRequestBody enable dump for requests fired
+// EnableDumpAllWithoutRequestBody enables dump for requests fired
 // from the client without request body, can be used in the upload
 // request to avoid dumping the unreadable binary content.
+//
+// EnableDumpAllWithoutRequestBody 启用完整 dump 但省略请求正文，适合上传二进制内容时避免记录不可读或敏感数据。
 func (c *Client) EnableDumpAllWithoutRequestBody() *Client {
 	o := c.getDumpOptions()
 	o.RequestBody = false
@@ -716,9 +849,11 @@ func (c *Client) EnableDumpAllWithoutRequestBody() *Client {
 	return c
 }
 
-// EnableDumpAllWithoutResponseBody enable dump for requests fired
+// EnableDumpAllWithoutResponseBody enables dump for requests fired
 // from the client without response body, can be used in the download
 // request to avoid dumping the unreadable binary content.
+//
+// EnableDumpAllWithoutResponseBody 启用完整 dump 但省略响应正文，适合下载二进制内容时避免记录不可读或敏感数据。
 func (c *Client) EnableDumpAllWithoutResponseBody() *Client {
 	o := c.getDumpOptions()
 	o.ResponseBody = false
@@ -726,9 +861,11 @@ func (c *Client) EnableDumpAllWithoutResponseBody() *Client {
 	return c
 }
 
-// EnableDumpAllWithoutResponse enable dump for requests fired from
+// EnableDumpAllWithoutResponse enables dump for requests fired from
 // the client without response, can be used if you only care about
 // the request.
+//
+// EnableDumpAllWithoutResponse 启用 dump 但不记录响应，仅记录请求。
 func (c *Client) EnableDumpAllWithoutResponse() *Client {
 	o := c.getDumpOptions()
 	o.ResponseBody = false
@@ -740,6 +877,8 @@ func (c *Client) EnableDumpAllWithoutResponse() *Client {
 // EnableDumpAllWithoutRequest enables dump for requests fired from
 // the client without request, can be used if you only care about
 // the response.
+//
+// EnableDumpAllWithoutRequest 启用 dump 但不记录请求，仅记录响应。
 func (c *Client) EnableDumpAllWithoutRequest() *Client {
 	o := c.getDumpOptions()
 	o.RequestHeader = false
@@ -748,9 +887,11 @@ func (c *Client) EnableDumpAllWithoutRequest() *Client {
 	return c
 }
 
-// EnableDumpAllWithoutHeader enable dump for requests fired from
+// EnableDumpAllWithoutHeader enables dump for requests fired from
 // the client without header, can be used if you only care about
 // the body.
+//
+// EnableDumpAllWithoutHeader 启用 dump 但省略请求和响应 Header。
 func (c *Client) EnableDumpAllWithoutHeader() *Client {
 	o := c.getDumpOptions()
 	o.RequestHeader = false
@@ -759,9 +900,11 @@ func (c *Client) EnableDumpAllWithoutHeader() *Client {
 	return c
 }
 
-// EnableDumpAllWithoutBody enable dump for requests fired from
+// EnableDumpAllWithoutBody enables dump for requests fired from
 // the client without body, can be used if you only care about
 // the header.
+//
+// EnableDumpAllWithoutBody 启用 dump 但省略请求和响应正文。
 func (c *Client) EnableDumpAllWithoutBody() *Client {
 	o := c.getDumpOptions()
 	o.RequestBody = false
@@ -770,9 +913,11 @@ func (c *Client) EnableDumpAllWithoutBody() *Client {
 	return c
 }
 
-// EnableDumpEachRequest enable dump at the request-level for each request, and only
+// EnableDumpEachRequest enables dump at the request-level for each request, and only
 // temporarily stores the dump content in memory, call Response.Dump() to get the
 // dump content when needed.
+//
+// EnableDumpEachRequest 为每个 Request 启用 dump；默认包含该请求及其响应的全部内容。
 func (c *Client) EnableDumpEachRequest() *Client {
 	return c.OnBeforeRequest(func(client *Client, req *Request) error {
 		if req.RetryAttempt == 0 { // Ignore on retry, no need to repeat enable dump.
@@ -782,9 +927,11 @@ func (c *Client) EnableDumpEachRequest() *Client {
 	})
 }
 
-// EnableDumpEachRequestWithoutBody enable dump without body at the request-level for
+// EnableDumpEachRequestWithoutBody enables dump without body at the request-level for
 // each request, and only temporarily stores the dump content in memory, call
 // Response.Dump() to get the dump content when needed.
+//
+// EnableDumpEachRequestWithoutBody 为每个 Request 启用 dump，但省略请求和响应正文。
 func (c *Client) EnableDumpEachRequestWithoutBody() *Client {
 	return c.OnBeforeRequest(func(client *Client, req *Request) error {
 		if req.RetryAttempt == 0 { // Ignore on retry, no need to repeat enable dump.
@@ -794,9 +941,11 @@ func (c *Client) EnableDumpEachRequestWithoutBody() *Client {
 	})
 }
 
-// EnableDumpEachRequestWithoutHeader enable dump without header at the request-level for
+// EnableDumpEachRequestWithoutHeader enables dump without header at the request-level for
 // each request, and only temporarily stores the dump content in memory, call
 // Response.Dump() to get the dump content when needed.
+//
+// EnableDumpEachRequestWithoutHeader 为每个 Request 启用 dump，但省略请求和响应 Header。
 func (c *Client) EnableDumpEachRequestWithoutHeader() *Client {
 	return c.OnBeforeRequest(func(client *Client, req *Request) error {
 		if req.RetryAttempt == 0 { // Ignore on retry, no need to repeat enable dump.
@@ -806,9 +955,11 @@ func (c *Client) EnableDumpEachRequestWithoutHeader() *Client {
 	})
 }
 
-// EnableDumpEachRequestWithoutRequest enable dump without request at the request-level for
+// EnableDumpEachRequestWithoutRequest enables dump without request at the request-level for
 // each request, and only temporarily stores the dump content in memory, call
 // Response.Dump() to get the dump content when needed.
+//
+// EnableDumpEachRequestWithoutRequest 为每个 Request 启用 dump，但不记录请求部分。
 func (c *Client) EnableDumpEachRequestWithoutRequest() *Client {
 	return c.OnBeforeRequest(func(client *Client, req *Request) error {
 		if req.RetryAttempt == 0 { // Ignore on retry, no need to repeat enable dump.
@@ -818,9 +969,11 @@ func (c *Client) EnableDumpEachRequestWithoutRequest() *Client {
 	})
 }
 
-// EnableDumpEachRequestWithoutResponse enable dump without response at the request-level for
+// EnableDumpEachRequestWithoutResponse enables dump without response at the request-level for
 // each request, and only temporarily stores the dump content in memory, call
 // Response.Dump() to get the dump content when needed.
+//
+// EnableDumpEachRequestWithoutResponse 为每个 Request 启用 dump，但不记录响应部分。
 func (c *Client) EnableDumpEachRequestWithoutResponse() *Client {
 	return c.OnBeforeRequest(func(client *Client, req *Request) error {
 		if req.RetryAttempt == 0 { // Ignore on retry, no need to repeat enable dump.
@@ -830,9 +983,11 @@ func (c *Client) EnableDumpEachRequestWithoutResponse() *Client {
 	})
 }
 
-// EnableDumpEachRequestWithoutResponseBody enable dump without response body at the
+// EnableDumpEachRequestWithoutResponseBody enables dump without response body at the
 // request-level for each request, and only temporarily stores the dump content in memory,
 // call Response.Dump() to get the dump content when needed.
+//
+// EnableDumpEachRequestWithoutResponseBody 为每个 Request 启用 dump，但省略响应正文。
 func (c *Client) EnableDumpEachRequestWithoutResponseBody() *Client {
 	return c.OnBeforeRequest(func(client *Client, req *Request) error {
 		if req.RetryAttempt == 0 { // Ignore on retry, no need to repeat enable dump.
@@ -842,9 +997,11 @@ func (c *Client) EnableDumpEachRequestWithoutResponseBody() *Client {
 	})
 }
 
-// EnableDumpEachRequestWithoutRequestBody enable dump without request body at the
+// EnableDumpEachRequestWithoutRequestBody enables dump without request body at the
 // request-level for each request, and only temporarily stores the dump content in memory,
 // call Response.Dump() to get the dump content when needed.
+//
+// EnableDumpEachRequestWithoutRequestBody 为每个 Request 启用 dump，但省略请求正文。
 func (c *Client) EnableDumpEachRequestWithoutRequestBody() *Client {
 	return c.OnBeforeRequest(func(client *Client, req *Request) error {
 		if req.RetryAttempt == 0 { // Ignore on retry, no need to repeat enable dump.
@@ -854,11 +1011,16 @@ func (c *Client) EnableDumpEachRequestWithoutRequestBody() *Client {
 	})
 }
 
-// NewRequest is the alias of R()
+// NewRequest is an alias for R.
+//
+// NewRequest 创建关联到此 Client 的新 Request；它等同于 R。
 func (c *Client) NewRequest() *Request {
 	return c.R()
 }
 
+// NewParallelDownload creates a ParallelDownload for url using c.
+//
+// NewParallelDownload 使用当前 Client 和 url 创建 ParallelDownload。
 func (c *Client) NewParallelDownload(url string) *ParallelDownload {
 	return &ParallelDownload{
 		url:    url,
@@ -866,13 +1028,19 @@ func (c *Client) NewParallelDownload(url string) *ParallelDownload {
 	}
 }
 
-// DisableAutoReadResponse disable read response body automatically (enabled by default).
+// DisableAutoReadResponse disables read response body automatically (enabled by default).
+//
+// DisableAutoReadResponse 关闭普通响应正文的自动读取；未使用 SetOutput 或 SetOutputFile 时，
+// 调用方随后负责读取并关闭 Response.Body。下载流程不受此开关影响。
 func (c *Client) DisableAutoReadResponse() *Client {
 	c.disableAutoReadResponse = true
 	return c
 }
 
-// EnableAutoReadResponse enable read response body automatically (enabled by default).
+// EnableAutoReadResponse enables read response body automatically (enabled by default).
+//
+// EnableAutoReadResponse 恢复普通响应正文的自动读取；这是默认行为，库会读取并缓存正文，
+// 使用 SetOutput 或 SetOutputFile 的请求仍由下载流程处理。
 func (c *Client) EnableAutoReadResponse() *Client {
 	c.disableAutoReadResponse = false
 	return c
@@ -895,6 +1063,10 @@ func (c *Client) EnableAutoReadResponse() *Client {
 // A value of 0 or less disables the limit (default). This is useful for bounding
 // memory use and network bandwidth when talking to untrusted or unexpectedly
 // large endpoints.
+//
+// SetMaxResponseSize 设置响应正文允许的最大字节数；该限制同时约束自动读取、下载和调用方
+// 对 Response.Body 的读取，超限时返回 ResponseBodyTooLargeError。max 小于或等于 0 时禁用限制，
+// HEAD 响应不会仅因 Content-Length 超限而失败。
 func (c *Client) SetMaxResponseSize(max int64) *Client {
 	if max < 0 {
 		max = 0
@@ -903,59 +1075,79 @@ func (c *Client) SetMaxResponseSize(max int64) *Client {
 	return c
 }
 
-// SetAutoDecodeContentType set the content types that will be auto-detected and decode to utf-8
+// SetAutoDecodeContentType sets content types that will be automatically detected and decoded as UTF-8
 // (e.g. "json", "xml", "html", "text").
+//
+// SetAutoDecodeContentType 设置需要自动解码的响应 Content-Type 列表。
 func (c *Client) SetAutoDecodeContentType(contentTypes ...string) *Client {
 	c.Transport.SetAutoDecodeContentType(contentTypes...)
 	return c
 }
 
-// SetAutoDecodeContentTypeFunc set the function that determines whether the specified `Content-Type` should be auto-detected and decode to utf-8.
+// SetAutoDecodeContentTypeFunc sets the function that determines whether a `Content-Type` should be automatically detected and decoded as UTF-8.
+//
+// SetAutoDecodeContentTypeFunc 设置判断响应 Content-Type 是否应自动解码的函数。
 func (c *Client) SetAutoDecodeContentTypeFunc(fn func(contentType string) bool) *Client {
 	c.Transport.SetAutoDecodeContentTypeFunc(fn)
 	return c
 }
 
-// SetAutoDecodeAllContentType enable try auto-detect charset and decode all content type to utf-8.
+// SetAutoDecodeAllContentType enables charset auto-detection and UTF-8 decoding for every content type.
+//
+// SetAutoDecodeAllContentType 将所有响应 Content-Type 都视为可自动解码。
 func (c *Client) SetAutoDecodeAllContentType() *Client {
 	c.Transport.SetAutoDecodeAllContentType()
 	return c
 }
 
-// DisableAutoDecode disable auto-detect charset and decode to utf-8 (enabled by default).
+// DisableAutoDecode disables charset auto-detection and UTF-8 decoding, which are enabled by default.
+//
+// DisableAutoDecode 关闭响应正文的自动解码。
 func (c *Client) DisableAutoDecode() *Client {
 	c.Transport.DisableAutoDecode()
 	return c
 }
 
-// EnableAutoDecode enable auto-detect charset and decode to utf-8 (enabled by default).
+// EnableAutoDecode enables charset auto-detection and UTF-8 decoding, which are enabled by default.
+//
+// EnableAutoDecode 启用响应正文的自动解码。
 func (c *Client) EnableAutoDecode() *Client {
 	c.Transport.EnableAutoDecode()
 	return c
 }
 
-// SetUserAgent set the "User-Agent" header for requests fired from the client.
+// SetUserAgent sets the "User-Agent" header for requests fired from the client.
+//
+// SetUserAgent 为此 Client 创建的 Request 设置默认 User-Agent。
 func (c *Client) SetUserAgent(userAgent string) *Client {
 	return c.SetCommonHeader(header.UserAgent, userAgent)
 }
 
-// SetCommonBearerAuthToken set the bearer auth token for requests fired from the client.
+// SetCommonBearerAuthToken sets the bearer auth token for requests fired from the client.
+//
+// SetCommonBearerAuthToken 为此 Client 创建的 Request 设置默认 Bearer Authorization token。
 func (c *Client) SetCommonBearerAuthToken(token string) *Client {
 	return c.SetCommonHeader(header.Authorization, "Bearer "+token)
 }
 
 // SetCommonAuthToken sets the Authorization header using Bearer scheme.
+//
+// SetCommonAuthToken 为此 Client 创建的 Request 设置默认 Authorization token。
 func (c *Client) SetCommonAuthToken(token string) *Client {
 	return c.SetCommonAuthSchemeToken("Bearer", token)
 }
 
 // SetCommonAuthSchemeToken sets the Authorization header using a custom auth scheme.
+//
+// SetCommonAuthSchemeToken 为此 Client 创建的 Request 设置默认 Authorization scheme 和 token。
 func (c *Client) SetCommonAuthSchemeToken(scheme, token string) *Client {
 	return c.SetCommonHeader(header.Authorization, authSchemeTokenValue(scheme, token))
 }
 
-// SetCommonBasicAuth set the basic auth for requests fired from
+// SetCommonBasicAuth sets the basic auth for requests fired from
 // the client.
+//
+// SetCommonBasicAuth 为此 Client 创建的 Request 设置默认 HTTP Basic 认证用户名和密码。
 func (c *Client) SetCommonBasicAuth(username, password string) *Client {
 	c.SetCommonHeader(header.Authorization, util.BasicAuthHeaderValue(username, password))
 	return c
@@ -972,6 +1164,8 @@ func (c *Client) SetCommonBasicAuth(username, password string) *Client {
 // Information about Digest Access Authentication can be found in RFC7616:
 //
 //	https://datatracker.ietf.org/doc/html/rfc7616
+//
+// SetCommonDigestAuth 为此 Client 创建的 Request 设置默认 HTTP Digest 认证用户名和密码。
 func (c *Client) SetCommonDigestAuth(username, password string) *Client {
 	c.digestAuth = &digestAuth{
 		Username:   username,
@@ -983,7 +1177,9 @@ func (c *Client) SetCommonDigestAuth(username, password string) *Client {
 	return c
 }
 
-// SetCommonHeaders set headers for requests fired from the client.
+// SetCommonHeaders sets headers for requests fired from the client.
+//
+// SetCommonHeaders 为此 Client 创建的 Request 批量设置默认 HTTP Header；每个键使用给定的单个值。
 func (c *Client) SetCommonHeaders(hdrs map[string]string) *Client {
 	for k, v := range hdrs {
 		c.SetCommonHeader(k, v)
@@ -992,11 +1188,15 @@ func (c *Client) SetCommonHeaders(hdrs map[string]string) *Client {
 }
 
 // SetCommonHeaderAny sets a header value converted from any type with fmt.Sprint.
+//
+// SetCommonHeaderAny 为此 Client 创建的 Request 设置默认 HTTP Header，并用 fmt.Sprint 转换 value。
 func (c *Client) SetCommonHeaderAny(key string, value any) *Client {
 	return c.SetCommonHeader(key, fmt.Sprint(value))
 }
 
 // SetCommonHeaderValues sets multiple values for a common header key.
+//
+// SetCommonHeaderValues 为此 Client 创建的 Request 为一个默认 HTTP Header 设置一个或多个值。
 func (c *Client) SetCommonHeaderValues(key string, values ...string) *Client {
 	if c.Headers == nil {
 		c.Headers = make(http.Header)
@@ -1006,6 +1206,8 @@ func (c *Client) SetCommonHeaderValues(key string, values ...string) *Client {
 }
 
 // SetCommonHeaderMultiValues sets multiple common headers whose values may contain more than one entry.
+//
+// SetCommonHeaderMultiValues 为此 Client 创建的 Request 批量设置带多值的默认 HTTP Header。
 func (c *Client) SetCommonHeaderMultiValues(hdrs map[string][]string) *Client {
 	for k, v := range hdrs {
 		c.SetCommonHeaderValues(k, v...)
@@ -1013,7 +1215,9 @@ func (c *Client) SetCommonHeaderMultiValues(hdrs map[string][]string) *Client {
 	return c
 }
 
-// SetCommonHeader set a header for requests fired from the client.
+// SetCommonHeader sets a header for requests fired from the client.
+//
+// SetCommonHeader 为此 Client 创建的 Request 设置一个默认 HTTP Header 键值对。
 func (c *Client) SetCommonHeader(key, value string) *Client {
 	if c.Headers == nil {
 		c.Headers = make(http.Header)
@@ -1022,9 +1226,11 @@ func (c *Client) SetCommonHeader(key, value string) *Client {
 	return c
 }
 
-// SetCommonHeaderNonCanonical set a header for requests fired from
+// SetCommonHeaderNonCanonical sets a header for requests fired from
 // the client which key is a non-canonical key (keep case unchanged),
 // only valid for HTTP/1.1.
+//
+// SetCommonHeaderNonCanonical 为此 Client 创建的 Request 设置一个保持原始大小写的默认 HTTP Header。
 func (c *Client) SetCommonHeaderNonCanonical(key, value string) *Client {
 	if c.Headers == nil {
 		c.Headers = make(http.Header)
@@ -1033,9 +1239,11 @@ func (c *Client) SetCommonHeaderNonCanonical(key, value string) *Client {
 	return c
 }
 
-// SetCommonHeadersNonCanonical set headers for requests fired from the
+// SetCommonHeadersNonCanonical sets headers for requests fired from the
 // client which key is a non-canonical key (keep case unchanged), only
 // valid for HTTP/1.1.
+//
+// SetCommonHeadersNonCanonical 为此 Client 创建的 Request 批量设置保持原始大小写的默认 HTTP Header。
 func (c *Client) SetCommonHeadersNonCanonical(hdrs map[string]string) *Client {
 	for k, v := range hdrs {
 		c.SetCommonHeaderNonCanonical(k, v)
@@ -1043,7 +1251,7 @@ func (c *Client) SetCommonHeadersNonCanonical(hdrs map[string]string) *Client {
 	return c
 }
 
-// SetCommonHeaderOrder set the order of the http header requests fired from the
+// SetCommonHeaderOrder sets the order of the http header requests fired from the
 // client (case-insensitive).
 // For example:
 //
@@ -1053,6 +1261,8 @@ func (c *Client) SetCommonHeadersNonCanonical(hdrs map[string]string) *Client {
 //	    "user-agent",
 //	    "accept-encoding",
 //	).Get(url
+//
+// SetCommonHeaderOrder 设置此 Client 请求的普通 HTTP Header 发送顺序。
 func (c *Client) SetCommonHeaderOrder(keys ...string) *Client {
 	c.Transport.WrapRoundTripFunc(func(rt http.RoundTripper) HttpRoundTripFunc {
 		return func(req *http.Request) (resp *http.Response, err error) {
@@ -1066,7 +1276,7 @@ func (c *Client) SetCommonHeaderOrder(keys ...string) *Client {
 	return c
 }
 
-// SetCommonPseudoHeaderOder set the order of the pseudo http header requests fired
+// SetCommonPseudoHeaderOder sets the order of the pseudo http header requests fired
 // from the client (case-insensitive).
 // Note this is only valid for http2 and http3.
 // For example:
@@ -1077,6 +1287,8 @@ func (c *Client) SetCommonHeaderOrder(keys ...string) *Client {
 //	    ":path",
 //	    ":method",
 //	)
+//
+// SetCommonPseudoHeaderOder 设置 HTTP/2 伪 Header 的发送顺序；方法名中的 Oder 为既有拼写。
 func (c *Client) SetCommonPseudoHeaderOder(keys ...string) *Client {
 	c.Transport.WrapRoundTripFunc(func(rt http.RoundTripper) HttpRoundTripFunc {
 		return func(req *http.Request) (resp *http.Response, err error) {
@@ -1090,51 +1302,67 @@ func (c *Client) SetCommonPseudoHeaderOder(keys ...string) *Client {
 	return c
 }
 
-// SetHTTP2SettingsFrame set the ordered http2 settings frame.
+// SetHTTP2SettingsFrame sets the ordered http2 settings frame.
+//
+// SetHTTP2SettingsFrame 设置 HTTP/2 初始 SETTINGS 帧中发送的设置项。
 func (c *Client) SetHTTP2SettingsFrame(settings ...http2.Setting) *Client {
 	c.Transport.SetHTTP2SettingsFrame(settings...)
 	return c
 }
 
-// SetHTTP2ConnectionFlow set the default http2 connection flow, which is the increment
+// SetHTTP2ConnectionFlow sets the default http2 connection flow, which is the increment
 // value of initial WINDOW_UPDATE frame.
+//
+// SetHTTP2ConnectionFlow 设置 HTTP/2 连接级流量控制窗口大小。
 func (c *Client) SetHTTP2ConnectionFlow(flow uint32) *Client {
 	c.Transport.SetHTTP2ConnectionFlow(flow)
 	return c
 }
 
 // SetHTTP2InitialStreamID sets the first client-initiated HTTP/2 stream ID.
+//
+// SetHTTP2InitialStreamID 设置 HTTP/2 使用的初始 Stream ID。
 func (c *Client) SetHTTP2InitialStreamID(id uint32) *Client {
 	c.Transport.SetHTTP2InitialStreamID(id)
 	return c
 }
 
-// SetHTTP2HeaderPriority set the header priority param.
+// SetHTTP2HeaderPriority sets the header priority param.
+//
+// SetHTTP2HeaderPriority 设置 HTTP/2 Header 所在流的优先级参数。
 func (c *Client) SetHTTP2HeaderPriority(priority http2.PriorityParam) *Client {
 	c.Transport.SetHTTP2HeaderPriority(priority)
 	return c
 }
 
-// SetHTTP2PriorityFrames set the ordered http2 priority frames.
+// SetHTTP2PriorityFrames sets the ordered http2 priority frames.
+//
+// SetHTTP2PriorityFrames 设置要发送的 HTTP/2 PRIORITY 帧。
 func (c *Client) SetHTTP2PriorityFrames(frames ...http2.PriorityFrame) *Client {
 	c.Transport.SetHTTP2PriorityFrames(frames...)
 	return c
 }
 
-// SetCommonContentType set the `Content-Type` header for requests fired
+// SetCommonContentType sets the `Content-Type` header for requests fired
 // from the client.
+//
+// SetCommonContentType 为此 Client 创建的 Request 设置默认 Content-Type。
 func (c *Client) SetCommonContentType(ct string) *Client {
 	c.SetCommonHeader(header.ContentType, ct)
 	return c
 }
 
-// DisableDumpAll disable dump for requests fired from the client.
+// DisableDumpAll disables dump for requests fired from the client.
+//
+// DisableDumpAll 关闭此 Client 的全局 dump 设置。
 func (c *Client) DisableDumpAll() *Client {
 	c.DisableDump()
 	return c
 }
 
 // DisableDump disables dump for requests fired from the client.
+//
+// DisableDump 关闭此 Client 的 dump 功能。
 func (c *Client) DisableDump() {
 	c.Transport.DisableDump()
 	c.closeDumpOutput()
@@ -1155,6 +1383,8 @@ func (c *Client) closeDumpOutput() {
 
 // SetCommonDumpOptions configures the underlying Transport's DumpOptions
 // for requests fired from the client.
+//
+// SetCommonDumpOptions 设置此 Client 创建的 Request 默认使用的 DumpOptions。
 func (c *Client) SetCommonDumpOptions(opt *DumpOptions) *Client {
 	if opt == nil {
 		return c
@@ -1176,32 +1406,44 @@ func (c *Client) SetCommonDumpOptions(opt *DumpOptions) *Client {
 	return c
 }
 
-// SetProxy set the proxy function.
+// SetProxy sets the proxy function.
+//
+// SetProxy 设置此 Client 的代理选择函数；函数根据请求返回代理 URL 或错误。
 func (c *Client) SetProxy(proxy func(*http.Request) (*urlpkg.URL, error)) *Client {
 	c.Transport.SetProxy(proxy)
 	return c
 }
 
-// OnError set the error hook which will be executed if any error returned,
-// even if the occurs before request is sent (e.g. invalid URL).
+// OnError sets the error hook which will be executed if any error is returned,
+// even if it occurs before the request is sent (e.g. an invalid URL).
+//
+// OnError 设置请求错误 hook，并替换此前设置的 hook；即使错误发生在发送前（例如 URL 无效）
+// 也会调用它。
 func (c *Client) OnError(hook ErrorHook) *Client {
 	c.onError = hook
 	return c
 }
 
-// OnBeforeRequest add a request middleware which hooks before request sent.
+// OnBeforeRequest adds a request middleware which hooks before request sent.
+//
+// OnBeforeRequest 注册请求前中间件；每个 Request 发送前按注册顺序执行。
 func (c *Client) OnBeforeRequest(m RequestMiddleware) *Client {
 	c.udBeforeRequest = append(c.udBeforeRequest, m)
 	return c
 }
 
-// OnAfterResponse add a response middleware which hooks after response received.
+// OnAfterResponse adds response middleware that runs after each request attempt,
+// including attempts that finish with an error.
+//
+// OnAfterResponse 追加响应后中间件；每次请求尝试结束后（包括发生错误时）按注册顺序执行。
 func (c *Client) OnAfterResponse(m ResponseMiddleware) *Client {
 	c.afterResponse = append(c.afterResponse, m)
 	return c
 }
 
-// SetProxyURL set proxy from the proxy URL.
+// SetProxyURL sets proxy from the proxy URL.
+//
+// SetProxyURL 解析并设置此 Client 使用的固定代理 URL。
 func (c *Client) SetProxyURL(proxyUrl string) *Client {
 	if proxyUrl == "" {
 		c.log.Warnf("ignore empty proxy url in SetProxyURL")
@@ -1217,24 +1459,30 @@ func (c *Client) SetProxyURL(proxyUrl string) *Client {
 	return c
 }
 
-// DisableTraceAll disable trace for requests fired from the client.
+// DisableTraceAll disables trace for requests fired from the client.
+//
+// DisableTraceAll 关闭此 Client 所有 Request 的 trace 收集。
 func (c *Client) DisableTraceAll() *Client {
 	c.trace = false
 	return c
 }
 
-// EnableTraceAll enable trace for requests fired from the client (http3
+// EnableTraceAll enables trace for requests fired from the client (http3
 // currently does not support trace).
+//
+// EnableTraceAll 为此 Client 创建的所有 Request 启用 trace 收集。
 func (c *Client) EnableTraceAll() *Client {
 	c.trace = true
 	return c
 }
 
-// SetCookieJar set the cookie jar to the underlying `http.Client`, set to nil if you
+// SetCookieJar sets the cookie jar to the underlying `http.Client`, set to nil if you
 // want to disable cookies.
 // Note: If you use Client.Clone to clone a new Client, the new client will share the same
 // cookie jar as the old Client after cloning. Use SetCookieJarFactory instead if you want
 // to create a new CookieJar automatically when cloning a client.
+//
+// SetCookieJar 设置底层 http.Client 使用的 CookieJar。
 func (c *Client) SetCookieJar(jar http.CookieJar) *Client {
 	c.cookiejarFactory = nil
 	c.httpClient.Jar = jar
@@ -1242,6 +1490,8 @@ func (c *Client) SetCookieJar(jar http.CookieJar) *Client {
 }
 
 // GetCookies get cookies from the underlying `http.Client`'s `CookieJar`.
+//
+// GetCookies 从此 Client 的 CookieJar 获取指定 URL 当前匹配的 Cookie。
 func (c *Client) GetCookies(url string) ([]*http.Cookie, error) {
 	if c.httpClient.Jar == nil {
 		return nil, errors.New("cookie jar is not enabled")
@@ -1257,108 +1507,144 @@ func (c *Client) GetCookies(url string) ([]*http.Cookie, error) {
 // cookies from cookie jar and cookies set by SetCommonCookies.
 // Note: The cookie jar will not be cleared if you called SetCookieJar
 // instead of SetCookieJarFactory.
+//
+// ClearCookies 清除由 CookieJar 和 SetCommonCookies 保存的 Cookie；直接通过 SetCookieJar 设置的 jar 不会被清空。
 func (c *Client) ClearCookies() *Client {
 	c.initCookieJar()
 	c.Cookies = nil
 	return c
 }
 
-// SetJsonMarshal set the JSON marshal function which will be used
+// SetJsonMarshal sets the JSON marshal function which will be used
 // to marshal request body.
+//
+// SetJsonMarshal 设置 JSON 编码函数，用于将请求值序列化为 JSON。
 func (c *Client) SetJsonMarshal(fn func(v any) ([]byte, error)) *Client {
 	c.jsonMarshal = fn
 	return c
 }
 
-// SetJsonUnmarshal set the JSON unmarshal function which will be used
+// SetJsonUnmarshal sets the JSON unmarshal function which will be used
 // to unmarshal response body.
+//
+// SetJsonUnmarshal 设置 JSON 解码函数，用于将响应数据反序列化为 JSON。
 func (c *Client) SetJsonUnmarshal(fn func(data []byte, v any) error) *Client {
 	c.jsonUnmarshal = fn
 	return c
 }
 
-// SetXmlMarshal set the XML marshal function which will be used
+// SetXmlMarshal sets the XML marshal function which will be used
 // to marshal request body.
+//
+// SetXmlMarshal 设置 XML 编码函数，用于将请求值序列化为 XML。
 func (c *Client) SetXmlMarshal(fn func(v any) ([]byte, error)) *Client {
 	c.xmlMarshal = fn
 	return c
 }
 
-// SetXmlUnmarshal set the XML unmarshal function which will be used
+// SetXmlUnmarshal sets the XML unmarshal function which will be used
 // to unmarshal response body.
+//
+// SetXmlUnmarshal 设置 XML 解码函数，用于将响应数据反序列化为 XML。
 func (c *Client) SetXmlUnmarshal(fn func(data []byte, v any) error) *Client {
 	c.xmlUnmarshal = fn
 	return c
 }
 
-// SetDialTLS set the customized `DialTLSContext` function to Transport.
+// SetDialTLS sets the customized `DialTLSContext` function to Transport.
 // Make sure the returned `conn` implements pkg/tls.Conn if you want your
 // customized `conn` supports HTTP2.
+//
+// SetDialTLS 设置 HTTP/1 和 HTTP/2 的自定义 TLS 拨号函数；它仅用于非代理 HTTPS 请求。
 func (c *Client) SetDialTLS(fn func(ctx context.Context, network, addr string) (net.Conn, error)) *Client {
 	c.Transport.SetDialTLS(fn)
 	return c
 }
 
-// SetDial set the customized `DialContext` function to Transport.
+// SetDial sets the customized `DialContext` function to Transport.
+//
+// SetDial 设置 HTTP/1 和 HTTP/2 明文 TCP 连接的自定义 DialContext 函数。
 func (c *Client) SetDial(fn func(ctx context.Context, network, addr string) (net.Conn, error)) *Client {
 	c.Transport.SetDial(fn)
 	return c
 }
 
 // SetTLSFingerprintChrome uses tls fingerprint of Chrome browser.
+//
+// SetTLSFingerprintChrome 将 TLS ClientHello 指纹设为 Chrome 预设。
 func (c *Client) SetTLSFingerprintChrome() *Client {
 	return c.SetTLSFingerprint(utls.HelloChrome_133)
 }
 
 // SetTLSFingerprintFirefox uses tls fingerprint of Firefox browser.
+//
+// SetTLSFingerprintFirefox 将 TLS ClientHello 指纹设为 Firefox 预设。
 func (c *Client) SetTLSFingerprintFirefox() *Client {
 	return c.SetTLSFingerprint(utls.HelloFirefox_120)
 }
 
 // SetTLSFingerprintEdge uses tls fingerprint of Edge browser.
+//
+// SetTLSFingerprintEdge 将 TLS ClientHello 指纹设为 Edge 预设。
 func (c *Client) SetTLSFingerprintEdge() *Client {
 	return c.SetTLSFingerprint(utls.HelloEdge_Auto)
 }
 
 // SetTLSFingerprintQQ uses tls fingerprint of QQ browser.
+//
+// SetTLSFingerprintQQ 将 TLS ClientHello 指纹设为 QQ 预设。
 func (c *Client) SetTLSFingerprintQQ() *Client {
 	return c.SetTLSFingerprint(utls.HelloQQ_Auto)
 }
 
 // SetTLSFingerprintSafari uses tls fingerprint of Safari browser.
+//
+// SetTLSFingerprintSafari 将 TLS ClientHello 指纹设为 Safari 预设。
 func (c *Client) SetTLSFingerprintSafari() *Client {
 	return c.SetTLSFingerprint(utls.HelloSafari_16_0)
 }
 
 // SetTLSFingerprint360 uses tls fingerprint of 360 browser.
+//
+// SetTLSFingerprint360 将 TLS ClientHello 指纹设为 360 浏览器预设。
 func (c *Client) SetTLSFingerprint360() *Client {
 	return c.SetTLSFingerprint(utls.Hello360_Auto)
 }
 
 // SetTLSFingerprintIOS uses tls fingerprint of IOS.
+//
+// SetTLSFingerprintIOS 将 TLS ClientHello 指纹设为 iOS 预设。
 func (c *Client) SetTLSFingerprintIOS() *Client {
 	return c.SetTLSFingerprint(utls.HelloIOS_Auto)
 }
 
 // SetTLSFingerprintAndroid uses tls fingerprint of Android.
+//
+// SetTLSFingerprintAndroid 将 TLS ClientHello 指纹设为 Android 预设。
 func (c *Client) SetTLSFingerprintAndroid() *Client {
 	return c.SetTLSFingerprint(utls.HelloAndroid_11_OkHttp)
 }
 
 // SetTLSFingerprintRandomized uses randomized tls fingerprint.
+//
+// SetTLSFingerprintRandomized 将 TLS ClientHello 指纹设为随机化预设。
 func (c *Client) SetTLSFingerprintRandomized() *Client {
 	return c.SetTLSFingerprint(utls.HelloRandomized)
 }
 
-// SetTLSFingerprint set the tls fingerprint for tls handshake, will use utls
+// SetTLSFingerprint sets the tls fingerprint for tls handshake, will use utls
 // (https://github.com/refraction-networking/utls) to perform the tls handshake,
 // which uses the specified clientHelloID to simulate the tls fingerprint.
 // Note this is valid for HTTP1 and HTTP2, not HTTP3.
+//
+// SetTLSFingerprint 将 TLS ClientHello 指纹设为指定的 utls.ClientHelloID。
 func (c *Client) SetTLSFingerprint(clientHelloID utls.ClientHelloID) *Client {
 	return c.setTLSFingerprint(clientHelloID, nil)
 }
 
 // SetTLSFingerprintSpec sets the TLS fingerprint from a custom ClientHelloSpec.
+//
+// SetTLSFingerprintSpec 设置固定的 TLS ClientHelloSpec；同一 Client 并发或重复握手时应优先使用工厂版本。
 // Deprecated: Prefer SetTLSFingerprintSpecFactory when the same client may
 // open multiple TLS connections. uTLS mutates ClientHelloSpec during
 // ApplyPreset, so reusing one spec can fail on consecutive handshakes.
@@ -1373,6 +1659,8 @@ func (c *Client) SetTLSFingerprintSpec(clientHelloSpec *utls.ClientHelloSpec) *C
 // returns a fresh custom ClientHelloSpec for every TLS handshake.
 // The factory may be called concurrently and must synchronize any shared state.
 // Note this is valid for HTTP1 and HTTP2, not HTTP3.
+//
+// SetTLSFingerprintSpecFactory 设置 TLS ClientHelloSpec 工厂；每次握手通过该函数获取新的 spec。
 func (c *Client) SetTLSFingerprintSpecFactory(fn func() *utls.ClientHelloSpec) *Client {
 	return c.setTLSFingerprint(utls.HelloCustom, func(conn *uTLSConn) error {
 		if fn == nil {
@@ -1388,6 +1676,8 @@ func (c *Client) SetTLSFingerprintSpecFactory(fn func() *utls.ClientHelloSpec) *
 
 // SetTLSFingerprintJA3 sets the TLS fingerprint from a JA3 string.
 // Note this is valid for HTTP1 and HTTP2, not HTTP3.
+//
+// SetTLSFingerprintJA3 根据 JA3 字符串和 User-Agent 设置 TLS 指纹；forceHTTP1 控制是否强制使用 HTTP/1。
 func (c *Client) SetTLSFingerprintJA3(ja3, userAgent string, forceHTTP1 bool) *Client {
 	return c.setTLSFingerprint(utls.HelloCustom, func(conn *uTLSConn) error {
 		clientHelloSpec, err := cycletls.StringToSpec(ja3, userAgent, forceHTTP1)
@@ -1405,70 +1695,90 @@ func (c *Client) SetTLSFingerprintJA3(ja3, userAgent string, forceHTTP1 bool) *C
 // cancellation and/or a closed plainConn. On error, cancellation, or timeout,
 // req closes plainConn and any connection the hook returns, including a late
 // result after req has already returned.
+//
+// SetTLSHandshake 设置 HTTP/1 和 HTTP/2 的自定义 TLS 握手函数；成功时 hook 负责使用或关闭 plainConn，并应处理 ctx 取消。
 func (c *Client) SetTLSHandshake(fn func(ctx context.Context, addr string, plainConn net.Conn) (conn net.Conn, tlsState *tls.ConnectionState, err error)) *Client {
 	c.Transport.SetTLSHandshake(fn)
 	return c
 }
 
-// SetTLSHandshakeTimeout set the TLS handshake timeout.
+// SetTLSHandshakeTimeout sets the TLS handshake timeout.
+//
+// SetTLSHandshakeTimeout 设置 TLS 握手的超时时间。
 func (c *Client) SetTLSHandshakeTimeout(timeout time.Duration) *Client {
 	c.Transport.SetTLSHandshakeTimeout(timeout)
 	return c
 }
 
-// EnableForceHTTP1 enable force using HTTP1 (disabled by default).
+// EnableForceHTTP1 enables force using HTTP1 (disabled by default).
 //
 // Attention: This method should not be called when ImpersonateXXX, SetTLSFingerPrint or
 // SetTLSHandshake and other methods that will customize the tls handshake are called.
+//
+// EnableForceHTTP1 强制请求使用 HTTP/1；默认关闭，不能与会自定义 TLS 握手的 impersonation 或指纹方法混用。
 func (c *Client) EnableForceHTTP1() *Client {
 	c.Transport.EnableForceHTTP1()
 	return c
 }
 
-// EnableForceHTTP2 enable force using HTTP2 for https requests (disabled by default).
+// EnableForceHTTP2 enables force using HTTP2 for https requests (disabled by default).
 //
 // Attention: This method should not be called when ImpersonateXXX, SetTLSFingerPrint or
 // SetTLSHandshake and other methods that will customize the tls handshake are called.
+//
+// EnableForceHTTP2 强制 HTTPS 请求使用 HTTP/2；默认关闭，不能与会自定义 TLS 握手的 impersonation 或指纹方法混用。
 func (c *Client) EnableForceHTTP2() *Client {
 	c.Transport.EnableForceHTTP2()
 	return c
 }
 
-// EnableForceHTTP3 enable force using HTTP3 for https requests (disabled by default).
+// EnableForceHTTP3 enables force using HTTP3 for https requests (disabled by default).
 //
 // Attention: This method should not be called when ImpersonateXXX, SetTLSFingerPrint or
 // SetTLSHandshake and other methods that will customize the tls handshake are called.
+//
+// EnableForceHTTP3 强制 HTTPS 请求使用 HTTP/3；默认关闭，不能与会自定义 TLS 握手的 impersonation 或指纹方法混用。
 func (c *Client) EnableForceHTTP3() *Client {
 	c.Transport.EnableForceHTTP3()
 	return c
 }
 
-// DisableForceHttpVersion disable force using specified http
+// DisableForceHttpVersion disables force using specified http
 // version (disabled by default).
+//
+// DisableForceHttpVersion 取消强制指定 HTTP 版本的设置。
 func (c *Client) DisableForceHttpVersion() *Client {
 	c.Transport.DisableForceHttpVersion()
 	return c
 }
 
 // EnableH2C enables HTTP/2 over TCP without TLS.
+//
+// EnableH2C 启用无需 TLS 的明文 TCP 上 HTTP/2（h2c）。
 func (c *Client) EnableH2C() *Client {
 	c.Transport.EnableH2C()
 	return c
 }
 
 // DisableH2C disables HTTP/2 over TCP without TLS.
+//
+// DisableH2C 关闭无需 TLS 的明文 TCP 上 HTTP/2（h2c）。
 func (c *Client) DisableH2C() *Client {
 	c.Transport.DisableH2C()
 	return c
 }
 
-// DisableAllowGetMethodPayload disable sending GET method requests with body.
+// DisableAllowGetMethodPayload disables sending GET method requests with body.
+//
+// DisableAllowGetMethodPayload 禁止 GET 请求携带请求正文。
 func (c *Client) DisableAllowGetMethodPayload() *Client {
 	c.AllowGetMethodPayload = false
 	return c
 }
 
 // EnableAllowGetMethodPayload allows sending GET method requests with body.
+//
+// EnableAllowGetMethodPayload 允许 GET 请求携带请求正文。
 func (c *Client) EnableAllowGetMethodPayload() *Client {
 	c.AllowGetMethodPayload = true
 	return c
@@ -1479,6 +1789,8 @@ func (c *Client) isPayloadForbid(m string) bool {
 }
 
 // GetClient returns the underlying `http.Client`.
+//
+// GetClient 返回底层的 http.Client。
 func (c *Client) GetClient() *http.Client {
 	return c.httpClient
 }
@@ -1493,6 +1805,8 @@ func (c *Client) getRetryOption() *RetryOption {
 // SetCommonRetryCount enables retry and set the maximum retry count for requests
 // fired from the client.
 // It will retry infinitely if count is negative.
+//
+// SetCommonRetryCount 启用重试并设置默认最大重试次数；count 为负数时无限重试。
 func (c *Client) SetCommonRetryCount(count int) *Client {
 	c.getRetryOption().MaxRetries = count
 	return c
@@ -1506,13 +1820,17 @@ func (c *Client) SetCommonRetryCount(count int) *Client {
 //	     sleep := 0.01 * math.Exp2(float64(attempt))
 //	     return time.Duration(math.Min(2, sleep)) * time.Second
 //		 })
+//
+// SetCommonRetryInterval 设置默认重试间隔计算函数，可用于实现自定义退避算法。
 func (c *Client) SetCommonRetryInterval(getRetryIntervalFunc GetRetryIntervalFunc) *Client {
 	c.getRetryOption().GetRetryInterval = getRetryIntervalFunc
 	return c
 }
 
-// SetCommonRetryFixedInterval set retry to use a fixed interval for requests
+// SetCommonRetryFixedInterval sets retry to use a fixed interval for requests
 // fired from the client.
+//
+// SetCommonRetryFixedInterval 设置默认重试使用的固定间隔。
 func (c *Client) SetCommonRetryFixedInterval(interval time.Duration) *Client {
 	c.getRetryOption().GetRetryInterval = func(resp *Response, attempt int) time.Duration {
 		return interval
@@ -1520,16 +1838,20 @@ func (c *Client) SetCommonRetryFixedInterval(interval time.Duration) *Client {
 	return c
 }
 
-// SetCommonRetryBackoffInterval set retry to use a capped exponential backoff
+// SetCommonRetryBackoffInterval sets retry to use a capped exponential backoff
 // with jitter for requests fired from the client.
 // https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+//
+// SetCommonRetryBackoffInterval 设置默认重试使用带抖动且有上限的指数退避；min 和 max 分别控制下限与上限。
 func (c *Client) SetCommonRetryBackoffInterval(min, max time.Duration) *Client {
 	c.getRetryOption().GetRetryInterval = backoffInterval(min, max)
 	return c
 }
 
-// SetCommonRetryHook set the retry hook which will be executed before a retry.
+// SetCommonRetryHook sets the retry hook which will be executed before a retry.
 // It will override other retry hooks if any been added before.
+//
+// SetCommonRetryHook 设置默认重试 hook；它在每次重试前执行，并替换此前设置的重试 hooks。
 func (c *Client) SetCommonRetryHook(hook RetryHookFunc) *Client {
 	c.getRetryOption().RetryHooks = []RetryHookFunc{hook}
 	return c
@@ -1537,6 +1859,8 @@ func (c *Client) SetCommonRetryHook(hook RetryHookFunc) *Client {
 
 // AddCommonRetryHook adds a retry hook for requests fired from the client,
 // which will be executed before a retry.
+//
+// AddCommonRetryHook 追加一个默认重试 hook；它在每次重试前执行。
 func (c *Client) AddCommonRetryHook(hook RetryHookFunc) *Client {
 	ro := c.getRetryOption()
 	ro.RetryHooks = append(ro.RetryHooks, hook)
@@ -1546,6 +1870,8 @@ func (c *Client) AddCommonRetryHook(hook RetryHookFunc) *Client {
 // SetCommonRetryCondition sets the retry condition, which determines whether the
 // request should retry.
 // It will override other retry conditions if any been added before.
+//
+// SetCommonRetryCondition 设置默认重试条件，用于决定请求是否应重试，并替换此前设置的条件。
 func (c *Client) SetCommonRetryCondition(condition RetryConditionFunc) *Client {
 	c.getRetryOption().RetryConditions = []RetryConditionFunc{condition}
 	return c
@@ -1553,16 +1879,20 @@ func (c *Client) SetCommonRetryCondition(condition RetryConditionFunc) *Client {
 
 // AddCommonRetryCondition adds a retry condition, which determines whether the
 // request should retry.
+//
+// AddCommonRetryCondition 追加一个默认重试条件，用于决定请求是否应重试。
 func (c *Client) AddCommonRetryCondition(condition RetryConditionFunc) *Client {
 	ro := c.getRetryOption()
 	ro.RetryConditions = append(ro.RetryConditions, condition)
 	return c
 }
 
-// SetUnixSocket set client to dial connection use unix socket.
+// SetUnixSocket sets client to dial connection use unix socket.
 // For example:
 //
 // client.SetUnixSocket("/var/run/custom.sock")
+//
+// SetUnixSocket 将此 Client 的拨号目标改为指定 Unix socket 文件。
 func (c *Client) SetUnixSocket(file string) *Client {
 	return c.SetDial(func(ctx context.Context, network, addr string) (net.Conn, error) {
 		var d net.Dialer
@@ -1587,6 +1917,8 @@ func (c *Client) SetUnixSocket(file string) *Client {
 //		},
 //	}
 //	client.SetResolver(r)
+//
+// SetResolver 设置 HTTP/1 和 HTTP/2 拨号使用的 DNS Resolver；nil 使用默认解析器，随后调用 SetDial、SetHosts 或 SetUnixSocket 会替换它。
 func (c *Client) SetResolver(r *net.Resolver) *Client {
 	return c.SetDial(func(ctx context.Context, network, addr string) (net.Conn, error) {
 		d := net.Dialer{Resolver: r}
@@ -1625,6 +1957,8 @@ func (c *Client) SetResolver(r *net.Resolver) *Client {
 //		"db.internal":  "10.0.0.6",
 //		"v6.internal":  "::1",
 //	})
+//
+// SetHosts 设置 HTTP/1 和 HTTP/2 拨号使用的静态主机名到 IP 映射；未命中的非 IP 主机名会失败且不会查询系统 DNS。
 func (c *Client) SetHosts(hosts map[string]string) *Client {
 	m := make(map[string]string, len(hosts))
 	invalid := make(map[string]string)
@@ -1683,96 +2017,128 @@ func hostsMapKey(host string) string {
 }
 
 // DisableHTTP3 disables the http3 protocol.
+//
+// DisableHTTP3 关闭 HTTP/3 协议支持。
 func (c *Client) DisableHTTP3() *Client {
 	c.Transport.DisableHTTP3()
 	return c
 }
 
 // EnableHTTP3 enables the http3 protocol.
+//
+// EnableHTTP3 启用 HTTP/3 协议支持。
 func (c *Client) EnableHTTP3() *Client {
 	c.Transport.EnableHTTP3()
 	return c
 }
 
 // SetHTTP3AdditionalSettings sets additional HTTP/3 SETTINGS values.
+//
+// SetHTTP3AdditionalSettings 批量设置额外的 HTTP/3 SETTINGS 键值。
 func (c *Client) SetHTTP3AdditionalSettings(settings map[uint64]uint64) *Client {
 	c.Transport.SetHTTP3AdditionalSettings(settings)
 	return c
 }
 
 // SetHTTP3AdditionalSetting sets one additional HTTP/3 SETTINGS value.
+//
+// SetHTTP3AdditionalSetting 设置一个额外的 HTTP/3 SETTINGS 键值。
 func (c *Client) SetHTTP3AdditionalSetting(id, value uint64) *Client {
 	c.Transport.SetHTTP3AdditionalSetting(id, value)
 	return c
 }
 
 // SetHTTP3Grease adds a randomized HTTP/3 GREASE setting.
+//
+// SetHTTP3Grease 添加一个随机化的 HTTP/3 GREASE SETTINGS 项。
 func (c *Client) SetHTTP3Grease() *Client {
 	c.Transport.SetHTTP3Grease()
 	return c
 }
 
 // EnableHTTP3Datagrams enables HTTP/3 datagram support on the HTTP/3 and QUIC layers.
+//
+// EnableHTTP3Datagrams 在 HTTP/3 和 QUIC 层启用 Datagram 支持。
 func (c *Client) EnableHTTP3Datagrams() *Client {
 	c.Transport.EnableHTTP3Datagrams()
 	return c
 }
 
 // DisableHTTP3Datagrams disables HTTP/3 datagram support.
+//
+// DisableHTTP3Datagrams 关闭 HTTP/3 Datagram 支持。
 func (c *Client) DisableHTTP3Datagrams() *Client {
 	c.Transport.DisableHTTP3Datagrams()
 	return c
 }
 
 // EnableHTTP3ExtendedConnect enables HTTP/3 Extended CONNECT (RFC 9220).
+//
+// EnableHTTP3ExtendedConnect 启用 RFC 9220 定义的 HTTP/3 Extended CONNECT。
 func (c *Client) EnableHTTP3ExtendedConnect() *Client {
 	c.Transport.EnableHTTP3ExtendedConnect()
 	return c
 }
 
 // DisableHTTP3ExtendedConnect disables HTTP/3 Extended CONNECT (RFC 9220).
+//
+// DisableHTTP3ExtendedConnect 关闭 RFC 9220 定义的 HTTP/3 Extended CONNECT。
 func (c *Client) DisableHTTP3ExtendedConnect() *Client {
 	c.Transport.DisableHTTP3ExtendedConnect()
 	return c
 }
 
 // SetHTTP3MaxResponseHeaderBytes sets the HTTP/3 response header read limit.
+//
+// SetHTTP3MaxResponseHeaderBytes 设置 HTTP/3 响应 Header 的读取上限（字节）。
 func (c *Client) SetHTTP3MaxResponseHeaderBytes(max int) *Client {
 	c.Transport.SetHTTP3MaxResponseHeaderBytes(max)
 	return c
 }
 
 // SetHTTP3QUICConfig sets the QUIC config used by HTTP/3.
+//
+// SetHTTP3QUICConfig 设置 HTTP/3 使用的 QUIC 配置。
 func (c *Client) SetHTTP3QUICConfig(cfg *quic.Config) *Client {
 	c.Transport.SetHTTP3QUICConfig(cfg)
 	return c
 }
 
 // SetHTTP3QUICPerformanceProfile applies a balanced QUIC config for HTTP/3.
+//
+// SetHTTP3QUICPerformanceProfile 为 HTTP/3 应用均衡的 QUIC 性能配置。
 func (c *Client) SetHTTP3QUICPerformanceProfile() *Client {
 	c.Transport.SetHTTP3QUICPerformanceProfile()
 	return c
 }
 
 // SetHTTP3QUICChromeProfile applies Chrome-like QUIC performance defaults for HTTP/3.
+//
+// SetHTTP3QUICChromeProfile 为 HTTP/3 应用接近 Chrome 的 QUIC 性能默认值。
 func (c *Client) SetHTTP3QUICChromeProfile() *Client {
 	c.Transport.SetHTTP3QUICChromeProfile()
 	return c
 }
 
 // SetHTTP3TLSClientConfig sets a TLS config used only by HTTP/3.
+//
+// SetHTTP3TLSClientConfig 设置仅供 HTTP/3 使用的 TLS 配置。
 func (c *Client) SetHTTP3TLSClientConfig(cfg *tls.Config) *Client {
 	c.Transport.SetHTTP3TLSClientConfig(cfg)
 	return c
 }
 
 // SetHTTP3TLSChromeProfile applies Chrome-like HTTP/3 TLS constraints.
+//
+// SetHTTP3TLSChromeProfile 为 HTTP/3 应用接近 Chrome 的 TLS 约束。
 func (c *Client) SetHTTP3TLSChromeProfile() *Client {
 	c.Transport.SetHTTP3TLSChromeProfile()
 	return c
 }
 
 // SetHTTP3TLSFirefoxProfile applies Firefox-like HTTP/3 TLS constraints.
+//
+// SetHTTP3TLSFirefoxProfile 为 HTTP/3 应用接近 Firefox 的 TLS 约束。
 func (c *Client) SetHTTP3TLSFirefoxProfile() *Client {
 	c.Transport.SetHTTP3TLSFirefoxProfile()
 	return c
@@ -1781,12 +2147,16 @@ func (c *Client) SetHTTP3TLSFirefoxProfile() *Client {
 // EnableHTTP3FallbackOnError allows forced HTTP/3 requests to retry with
 // HTTP/2 or HTTP/1.1 when the HTTP/3 attempt fails before the request becomes
 // unreplayable.
+//
+// EnableHTTP3FallbackOnError 允许强制 HTTP/3 的请求在请求尚可重放且 HTTP/3 尝试失败时回退到 HTTP/2 或 HTTP/1.1。
 func (c *Client) EnableHTTP3FallbackOnError() *Client {
 	c.Transport.EnableHTTP3FallbackOnError()
 	return c
 }
 
 // DisableHTTP3FallbackOnError disables fallback for forced HTTP/3 requests.
+//
+// DisableHTTP3FallbackOnError 禁止强制 HTTP/3 请求在失败时回退到其他 HTTP 版本。
 func (c *Client) DisableHTTP3FallbackOnError() *Client {
 	c.Transport.DisableHTTP3FallbackOnError()
 	return c
@@ -1794,12 +2164,14 @@ func (c *Client) DisableHTTP3FallbackOnError() *Client {
 
 // SetHTTP3AltSvcFailureCooldown sets how long a failed Alt-Svc HTTP/3 endpoint
 // is skipped after fallback.
+//
+// SetHTTP3AltSvcFailureCooldown 设置 Alt-Svc 指向的 HTTP/3 端点失败后在回退期间跳过它的时长。
 func (c *Client) SetHTTP3AltSvcFailureCooldown(cooldown time.Duration) *Client {
 	c.Transport.SetHTTP3AltSvcFailureCooldown(cooldown)
 	return c
 }
 
-// SetHTTP2MaxHeaderListSize set the http2 MaxHeaderListSize,
+// SetHTTP2MaxHeaderListSize sets the http2 MaxHeaderListSize,
 // which is the http2 SETTINGS_MAX_HEADER_LIST_SIZE to
 // send in the initial settings frame. It is how many bytes
 // of response headers are allowed. Unlike the http2 spec, zero here
@@ -1807,12 +2179,14 @@ func (c *Client) SetHTTP3AltSvcFailureCooldown(cooldown time.Duration) *Client {
 // want to advertise an unlimited value to the peer, Transport
 // interprets the highest possible value here (0xffffffff or 1<<32-1)
 // to mean no limit.
+//
+// SetHTTP2MaxHeaderListSize 设置初始 HTTP/2 SETTINGS_MAX_HEADER_LIST_SIZE；0 使用当前默认 10 MiB，0xffffffff 表示向对端声明不设上限。
 func (c *Client) SetHTTP2MaxHeaderListSize(max uint32) *Client {
 	c.Transport.SetHTTP2MaxHeaderListSize(max)
 	return c
 }
 
-// SetHTTP2StrictMaxConcurrentStreams set the http2
+// SetHTTP2StrictMaxConcurrentStreams sets the http2
 // StrictMaxConcurrentStreams, which controls whether the
 // server's SETTINGS_MAX_CONCURRENT_STREAMS should be respected
 // globally. If false, new TCP connections are created to the
@@ -1821,36 +2195,44 @@ func (c *Client) SetHTTP2MaxHeaderListSize(max uint32) *Client {
 // server's SETTINGS_MAX_CONCURRENT_STREAMS is interpreted as
 // a global limit and callers of RoundTrip block when needed,
 // waiting for their turn.
+//
+// SetHTTP2StrictMaxConcurrentStreams 设置是否把服务端 SETTINGS_MAX_CONCURRENT_STREAMS 作为全局限制；为 false 时可新建连接，为 true 时调用会等待可用 stream。
 func (c *Client) SetHTTP2StrictMaxConcurrentStreams(strict bool) *Client {
 	c.Transport.SetHTTP2StrictMaxConcurrentStreams(strict)
 	return c
 }
 
-// SetHTTP2ReadIdleTimeout set the http2 ReadIdleTimeout,
+// SetHTTP2ReadIdleTimeout sets the http2 ReadIdleTimeout,
 // which is the timeout after which a health check using ping
 // frame will be carried out if no frame is received on the connection.
 // Note that a ping response will is considered a received frame, so if
 // there is no other traffic on the connection, the health check will
 // be performed every ReadIdleTimeout interval.
 // If zero, no health check is performed.
+//
+// SetHTTP2ReadIdleTimeout 设置 HTTP/2 读空闲健康检查间隔；连接在该时长未收到帧时发送 PING，0 表示不检查。
 func (c *Client) SetHTTP2ReadIdleTimeout(timeout time.Duration) *Client {
 	c.Transport.SetHTTP2ReadIdleTimeout(timeout)
 	return c
 }
 
-// SetHTTP2PingTimeout set the http2 PingTimeout, which is the timeout
+// SetHTTP2PingTimeout sets the http2 PingTimeout, which is the timeout
 // after which the connection will be closed if a response to Ping is
 // not received.
 // Defaults to 15s
+//
+// SetHTTP2PingTimeout 设置 HTTP/2 PING 响应等待时长；超时会关闭连接，默认值为 15 秒。
 func (c *Client) SetHTTP2PingTimeout(timeout time.Duration) *Client {
 	c.Transport.SetHTTP2PingTimeout(timeout)
 	return c
 }
 
-// SetHTTP2WriteByteTimeout set the http2 WriteByteTimeout, which is the
-// timeout after which the connection will be closed no data can be written
-// to it. The timeout begins when data is available to write, and is
+// SetHTTP2WriteByteTimeout sets the HTTP/2 WriteByteTimeout. The connection is
+// closed if no data can be written before this timeout. The timeout begins when
+// data is available to write and is
 // extended whenever any bytes are written.
+//
+// SetHTTP2WriteByteTimeout 设置 HTTP/2 写入超时；有数据待写却在该时长内无法写入时关闭连接，成功写入会延长计时。
 func (c *Client) SetHTTP2WriteByteTimeout(timeout time.Duration) *Client {
 	c.Transport.SetHTTP2WriteByteTimeout(timeout)
 	return c
@@ -1859,16 +2241,22 @@ func (c *Client) SetHTTP2WriteByteTimeout(timeout time.Duration) *Client {
 // Do is compatible with http.Client.Do, which can make req integration easier
 // in some scenarios. It should be noted that this will make some req features
 // not work properly, such as automatic retry, client middleware, etc.
+//
+// Do 直接调用底层 http.Client.Do；这会绕过 req 的自动重试和客户端中间件等部分功能。
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	return c.httpClient.Do(req)
 }
 
-// NewClient is the alias of C
+// NewClient is an alias for C.
+//
+// NewClient 创建使用默认配置的新 Client；它等同于 C。
 func NewClient() *Client {
 	return C()
 }
 
-// Clone copy and returns the Client
+// Clone copies and returns the Client.
+//
+// Clone 返回此 Client 的副本；Transport、http.Client、默认参数、中间件、dump 和重试配置会按需要复制。
 func (c *Client) Clone() *Client {
 	cc := *c
 
@@ -1910,7 +2298,9 @@ func memoryCookieJarFactory() http.CookieJar {
 	return jar
 }
 
-// C create a new client.
+// C creates a new client.
+//
+// C 创建使用默认 Transport、2 分钟超时和内存 CookieJar 的新 Client。
 func C() *Client {
 	t := T()
 
@@ -1949,11 +2339,13 @@ func C() *Client {
 	return c
 }
 
-// SetCookieJarFactory set the functional factory of cookie jar, which creates
+// SetCookieJarFactory sets the functional factory of cookie jar, which creates
 // cookie jar that store cookies for underlying `http.Client`. After client clone,
 // the cookie jar of the new client will also be regenerated using this factory
 // function. The factory can be either func() http.CookieJar or the legacy
 // func() *cookiejar.Jar.
+//
+// SetCookieJarFactory 设置 CookieJar 工厂；Client 克隆时会用该工厂为新的底层 http.Client 重新创建 jar，支持 func() http.CookieJar 和旧版 func() *cookiejar.Jar。
 func (c *Client) SetCookieJarFactory(factory any) *Client {
 	switch f := factory.(type) {
 	case nil:
@@ -1990,22 +2382,35 @@ func (c *Client) initTransport() {
 }
 
 // RoundTripper is the interface of req's Client.
+//
+// RoundTripper 定义处理 req Request 并返回 Response 的接口。
 type RoundTripper interface {
+	// RoundTrip processes req and returns its response or an error.
+	//
+	// RoundTrip 处理 req 并返回响应或错误。
 	RoundTrip(*Request) (*Response, error)
 }
 
 // RoundTripFunc is a RoundTripper implementation, which is a simple function.
+//
+// RoundTripFunc 将普通函数适配为 RoundTripper。
 type RoundTripFunc func(req *Request) (resp *Response, err error)
 
 // RoundTrip implements RoundTripper.
+//
+// RoundTrip 调用 fn 处理 req 并返回 Response 或错误。
 func (fn RoundTripFunc) RoundTrip(req *Request) (*Response, error) {
 	return fn(req)
 }
 
 // RoundTripWrapper is client middleware function.
+//
+// RoundTripWrapper 定义用于包装 RoundTripper 的客户端中间件函数。
 type RoundTripWrapper func(rt RoundTripper) RoundTripper
 
 // RoundTripWrapperFunc is client middleware function, more convenient than RoundTripWrapper.
+//
+// RoundTripWrapperFunc 定义返回 RoundTripFunc 的便捷客户端中间件函数。
 type RoundTripWrapperFunc func(rt RoundTripper) RoundTripFunc
 
 func (f RoundTripWrapperFunc) wrapper() RoundTripWrapper {
@@ -2016,6 +2421,8 @@ func (f RoundTripWrapperFunc) wrapper() RoundTripWrapper {
 
 // WrapRoundTripFunc adds a client middleware function that will give the caller
 // an opportunity to wrap the underlying http.RoundTripper.
+//
+// WrapRoundTripFunc 注册将底层 RoundTripper 包装为 RoundTripFunc 的客户端中间件。
 func (c *Client) WrapRoundTripFunc(funcs ...RoundTripWrapperFunc) *Client {
 	var wrappers []RoundTripWrapper
 	for _, fn := range funcs {
@@ -2034,6 +2441,8 @@ func (r roundTripImpl) RoundTrip(req *Request) (resp *Response, err error) {
 
 // WrapRoundTrip adds a client middleware function that will give the caller
 // an opportunity to wrap the underlying http.RoundTripper.
+//
+// WrapRoundTrip 注册包装底层 RoundTripper 的客户端中间件；未传入 wrapper 时保持现有配置不变。
 func (c *Client) WrapRoundTrip(wrappers ...RoundTripWrapper) *Client {
 	if len(wrappers) == 0 {
 		return c

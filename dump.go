@@ -22,7 +22,8 @@ type DumpOptions struct {
 	Async                bool
 }
 
-// Clone return a copy of DumpOptions
+// Clone returns a shallow copy of DumpOptions, preserving configured writers.
+// Clone 返回 DumpOptions 的浅拷贝，并保留已配置的 writer；nil 接收者返回 nil。
 func (do *DumpOptions) Clone() *DumpOptions {
 	if do == nil {
 		return nil

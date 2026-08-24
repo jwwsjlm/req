@@ -12,13 +12,16 @@ type AltSvcJar struct {
 	mu      sync.Mutex
 }
 
-// NewAltSvcJar create a AltSvcJar which implements Jar.
+// NewAltSvcJar creates an in-memory Alt-Svc jar that implements Jar.
+// NewAltSvcJar 创建一个实现 Jar 接口的内存 Alt-Svc 存储。
 func NewAltSvcJar() *AltSvcJar {
 	return &AltSvcJar{
 		entries: make(map[string]*AltSvc),
 	}
 }
 
+// GetAltSvc returns the unexpired Alt-Svc entry for addr, or nil when absent or expired.
+// GetAltSvc 返回 addr 对应且未过期的 Alt-Svc 条目；不存在或已过期时返回 nil。
 func (j *AltSvcJar) GetAltSvc(addr string) *AltSvc {
 	if addr == "" {
 		return nil
@@ -37,6 +40,8 @@ func (j *AltSvcJar) GetAltSvc(addr string) *AltSvc {
 	return as
 }
 
+// SetAltSvc stores the Alt-Svc entry for addr; an empty address is ignored.
+// SetAltSvc 保存 addr 对应的 Alt-Svc 条目；空地址会被忽略。
 func (j *AltSvcJar) SetAltSvc(addr string, as *AltSvc) {
 	if addr == "" {
 		return

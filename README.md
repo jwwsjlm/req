@@ -4,7 +4,7 @@
 
 原版文档仍然可以参考：[https://req.cool](https://req.cool)
 
-第一次接触 Go 或第一次用这个库，建议先看：[示例.md](示例.md)。那份文档从 `go mod init`、`go get`、第一个 `GET` 请求开始，一直写到 JSON、表单、Cookie、上传下载、代理、重试、浏览器伪装、HTTP/3 和常见报错。
+第一次使用这个增强版 req，或者想一边动手一边理解 Go，建议先看：[Go 与 req 零基础入门](docs/00-go-req-beginner.md)。它从空目录、`go mod init` 和第一个请求开始，带你写到可复用、可取消、可测试的业务 API Client。需要按功能查大量代码片段时，再看 [示例.md](示例.md)。
 
 按主题查阅和生产实践请看 [中文 Wiki](docs/Home.md)；仓库内可离线编译验证的示例见 [docs/examples](docs/examples/README.md)。
 
@@ -80,6 +80,7 @@
 
 | 主题 | 文档 |
 | --- | --- |
+| 第一次使用这个 fork / Go 零基础 | [Go 与 req 零基础入门](docs/00-go-req-beginner.md) |
 | 首页与推荐阅读顺序 | [中文 Wiki 首页](docs/Home.md) |
 | 快速入门与核心对象 | [快速入门](docs/01-getting-started.md)、[Client / Request / Response](docs/02-client-request-response.md) |
 | 请求、响应、认证和可靠性 | [构建请求](docs/03-building-requests.md)、[错误处理](docs/04-error-handling.md)、[认证与 Cookie](docs/05-auth-cookie.md)、[超时、重试与 Context](docs/06-timeout-retry-context.md) |

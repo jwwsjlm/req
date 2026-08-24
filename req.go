@@ -18,7 +18,8 @@ type ContentDisposition struct {
 	kv []kv
 }
 
-// Add adds a new key-value pair of Content-Disposition
+// Add appends a key-value parameter to the Content-Disposition value.
+// Add 向 Content-Disposition 值追加一个键值参数。
 func (c *ContentDisposition) Add(key, value string) *ContentDisposition {
 	c.kv = append(c.kv, kv{Key: key, Value: value})
 	return c
@@ -70,6 +71,7 @@ type UploadInfo struct {
 
 // UploadCallback is the callback which will be invoked during
 // multipart upload.
+// UploadCallback 是 multipart 上传过程中调用的进度回调。
 type UploadCallback func(info UploadInfo)
 
 // DownloadInfo is the information for each DownloadCallback call.
@@ -82,6 +84,7 @@ type DownloadInfo struct {
 
 // DownloadCallback is the callback which will be invoked during
 // response body download.
+// DownloadCallback 是下载响应体过程中调用的进度回调。
 type DownloadCallback func(info DownloadInfo)
 
 func cloneSlice[T any](s []T) []T {

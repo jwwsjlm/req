@@ -37,6 +37,8 @@ type ResponseBodyTooLargeError struct {
 	ContentLength int64
 }
 
+// Error returns a message describing the configured limit and observed response size.
+// Error 返回描述响应体限制以及已知响应大小的错误消息。
 func (e *ResponseBodyTooLargeError) Error() string {
 	if e.ContentLength >= 0 {
 		return fmt.Sprintf("req: response body too large: Content-Length %d exceeds limit %d", e.ContentLength, e.Limit)
@@ -45,6 +47,7 @@ func (e *ResponseBodyTooLargeError) Error() string {
 }
 
 // Is reports whether target is ErrResponseBodyTooLarge.
+// Is 报告目标错误是否为 ErrResponseBodyTooLarge。
 func (e *ResponseBodyTooLargeError) Is(target error) bool {
 	return target == ErrResponseBodyTooLarge
 }
@@ -108,6 +111,8 @@ type Response struct {
 // IsSuccess method returns true if no error occurs and HTTP status `code >= 200 and <= 299`
 // by default, you can also use Client.SetResultStateCheckFunc to customize the result
 // state check logic.
+// IsSuccess 默认在未发生错误且 HTTP 状态码为 2xx 时返回 true；可通过
+// Client.SetResultStateCheckFunc 自定义，该方法已弃用。
 //
 // Deprecated: Use IsSuccessState instead.
 func (r *Response) IsSuccess() bool {
@@ -117,6 +122,8 @@ func (r *Response) IsSuccess() bool {
 // IsSuccessState method returns true if no error occurs and HTTP status `code >= 200 and <= 299`
 // by default, you can also use Client.SetResultStateCheckFunc to customize the result state
 // check logic.
+// IsSuccessState 默认在存在底层响应且结果状态为 SuccessState 时返回 true；
+// 可通过 Client.SetResultStateCheckFunc 自定义状态判定。
 func (r *Response) IsSuccessState() bool {
 	if r.Response == nil {
 		return false
@@ -127,6 +134,8 @@ func (r *Response) IsSuccessState() bool {
 // IsError method returns true if no error occurs and HTTP status `code >= 400`
 // by default, you can also use Client.SetResultStateCheckFunc to customize the result
 // state check logic.
+// IsError 默认在未发生错误且 HTTP 状态码不小于 400 时返回 true；可通过
+// Client.SetResultStateCheckFunc 自定义，该方法已弃用。
 //
 // Deprecated: Use IsErrorState instead.
 func (r *Response) IsError() bool {
@@ -136,6 +145,8 @@ func (r *Response) IsError() bool {
 // IsErrorState method returns true if no error occurs and HTTP status `code >= 400`
 // by default, you can also use Client.SetResultStateCheckFunc to customize the result
 // state check logic.
+// IsErrorState 默认在存在底层响应且结果状态为 ErrorState 时返回 true；
+// 可通过 Client.SetResultStateCheckFunc 自定义状态判定。
 func (r *Response) IsErrorState() bool {
 	if r.Response == nil {
 		return false
@@ -143,7 +154,8 @@ func (r *Response) IsErrorState() bool {
 	return r.ResultState() == ErrorState
 }
 
-// GetContentType return the `Content-Type` header value.
+// GetContentType returns the Content-Type response header, or an empty string without a response.
+// GetContentType 返回响应的 Content-Type Header；没有底层响应时返回空字符串。
 func (r *Response) GetContentType() string {
 	if r.Response == nil {
 		return ""
@@ -156,6 +168,8 @@ func (r *Response) GetContentType() string {
 // ErrorState if HTTP status `code >= 400`, otherwise returns UnknownState.
 // You can also use Client.SetResultStateCheckFunc to customize the result
 // state check logic.
+// ResultState 返回结果状态；默认 2xx 为 SuccessState、不小于 400 为
+// ErrorState，其余为 UnknownState，也可由 Client.SetResultStateCheckFunc 自定义。
 func (r *Response) ResultState() ResultState {
 	if r.Response == nil {
 		return UnknownState
@@ -172,6 +186,7 @@ func (r *Response) ResultState() ResultState {
 // Result returns the automatically unmarshalled object if Request.SetSuccessResult
 // is called and ResultState returns SuccessState.
 // Otherwise, return nil.
+// Result 返回由 Request.SetSuccessResult 自动反序列化的成功结果；该方法已弃用。
 //
 // Deprecated: Use SuccessResult instead.
 func (r *Response) Result() any {
@@ -181,6 +196,8 @@ func (r *Response) Result() any {
 // SuccessResult returns the automatically unmarshalled object if Request.SetSuccessResult
 // is called and ResultState returns SuccessState.
 // Otherwise, return nil.
+// SuccessResult 返回由 Request.SetSuccessResult 自动反序列化的成功结果，
+// 未配置结果或状态不是 SuccessState 时返回 nil。
 func (r *Response) SuccessResult() any {
 	return r.result
 }
@@ -188,6 +205,8 @@ func (r *Response) SuccessResult() any {
 // Error returns the automatically unmarshalled object when Request.SetErrorResult
 // or Client.SetCommonErrorResult is called, and ResultState returns ErrorState.
 // Otherwise, return nil.
+// Error 返回由 Request.SetErrorResult 或 Client.SetCommonErrorResult 自动反序列化的
+// 错误结果；该方法已弃用。
 //
 // Deprecated: Use ErrorResult instead.
 func (r *Response) Error() any {
@@ -197,16 +216,19 @@ func (r *Response) Error() any {
 // ErrorResult returns the automatically unmarshalled object when Request.SetErrorResult
 // or Client.SetCommonErrorResult is called, and ResultState returns ErrorState.
 // Otherwise, return nil.
+// ErrorResult 返回自动反序列化的错误结果，未配置错误结果或状态不是 ErrorState 时返回 nil。
 func (r *Response) ErrorResult() any {
 	return r.error
 }
 
 // TraceInfo returns the TraceInfo from Request.
+// TraceInfo 返回关联请求收集的链路跟踪信息。
 func (r *Response) TraceInfo() TraceInfo {
 	return r.Request.TraceInfo()
 }
 
-// TotalTime returns the total time of the request, from request we sent to response we received.
+// TotalTime returns the elapsed time from sending the request until response processing completed.
+// TotalTime 返回从发送请求到响应处理完成的总耗时。
 func (r *Response) TotalTime() time.Duration {
 	if r.Request.trace != nil {
 		return r.Request.TraceInfo().TotalTime
@@ -217,7 +239,8 @@ func (r *Response) TotalTime() time.Duration {
 	return r.Request.responseReturnTime.Sub(r.Request.StartTime)
 }
 
-// ReceivedAt returns the timestamp that response we received.
+// ReceivedAt returns the time at which response processing completed.
+// ReceivedAt 返回响应处理完成的时间；尚未记录时为零值。
 func (r *Response) ReceivedAt() time.Time {
 	return r.receivedAt
 }
@@ -232,6 +255,7 @@ func (r *Response) setReceivedAt() {
 }
 
 // UnmarshalJson unmarshalls JSON response body into the specified object.
+// UnmarshalJson 使用 Client 配置的 JSON 解码器将响应体解析到 v。
 func (r *Response) UnmarshalJson(v any) error {
 	if r.Err != nil {
 		return r.Err
@@ -244,6 +268,7 @@ func (r *Response) UnmarshalJson(v any) error {
 }
 
 // UnmarshalXml unmarshalls XML response body into the specified object.
+// UnmarshalXml 使用 Client 配置的 XML 解码器将响应体解析到 v。
 func (r *Response) UnmarshalXml(v any) error {
 	if r.Err != nil {
 		return r.Err
@@ -257,6 +282,8 @@ func (r *Response) UnmarshalXml(v any) error {
 
 // Unmarshal unmarshalls response body into the specified object according
 // to response `Content-Type`.
+// Unmarshal 根据响应 Content-Type 将响应体解析到 v；非 XML 类型默认按 JSON 处理，
+// ErrorState 响应会返回包含 HTTP 状态的错误。
 func (r *Response) Unmarshal(v any) error {
 	if r.Err != nil {
 		return r.Err
@@ -276,45 +303,52 @@ func (r *Response) Unmarshal(v any) error {
 
 // Into unmarshalls response body into the specified object according
 // to response `Content-Type`.
+// Into 是 Unmarshal 的别名，根据响应 Content-Type 将响应体解析到 v。
 func (r *Response) Into(v any) error {
 	return r.Unmarshal(v)
 }
 
-// Set response body with byte array content
+// SetBody replaces the cached response body with body.
+// SetBody 使用 body 替换缓存的响应体，不会改写底层 http.Response.Body。
 func (r *Response) SetBody(body []byte) {
 	r.body = body
 }
 
-// Set response body with string content
+// SetBodyString replaces the cached response body with the bytes of body.
+// SetBodyString 使用 body 的字节内容替换缓存的响应体，不会改写底层 http.Response.Body。
 func (r *Response) SetBodyString(body string) {
 	r.body = []byte(body)
 }
 
-// Bytes return the response body as []bytes that have already been read, could be
-// nil if not read, the following cases are already read:
-//  1. `Request.SetResult` or `Request.SetError` is called.
+// Bytes returns the cached response body without reading from the underlying body.
+// It can be nil when the body has not been read. The body is normally cached when:
+//  1. Request.SetSuccessResult or Request.SetErrorResult is called.
 //  2. `Client.DisableAutoReadResponse` and `Request.DisableAutoReadResponse` is not
 //     called, and also `Request.SetOutput` and `Request.SetOutputFile` is not called.
+// Bytes 返回已缓存的响应体且不会主动读取底层 body；尚未读取时可能为 nil。
 func (r *Response) Bytes() []byte {
 	return r.body
 }
 
-// String returns the response body as string that have already been read, could be
-// nil if not read, the following cases are already read:
-//  1. `Request.SetResult` or `Request.SetError` is called.
+// String returns the cached response body as a string without reading the underlying body.
+// It is empty when the body is empty or has not been read. The body is normally cached when:
+//  1. Request.SetSuccessResult or Request.SetErrorResult is called.
 //  2. `Client.DisableAutoReadResponse` and `Request.DisableAutoReadResponse` is not
 //     called, and also `Request.SetOutput` and `Request.SetOutputFile` is not called.
+// String 以字符串返回已缓存的响应体且不会主动读取底层 body；未读取或为空时返回空字符串。
 func (r *Response) String() string {
 	return string(r.body)
 }
 
-// ToString returns the response body as string, read body if not have been read.
+// ToString returns the response body as a string, reading and caching it when necessary.
+// ToString 以字符串返回响应体；必要时会读取、关闭并缓存底层 body。
 func (r *Response) ToString() (string, error) {
 	b, err := r.ToBytes()
 	return string(b), err
 }
 
-// ToBytes returns the response body as []byte, read body if not have been read.
+// ToBytes returns the response body, reading, closing, transforming, and caching it when necessary.
+// ToBytes 返回响应体；必要时会读取并关闭底层 body、执行已配置的转换器并缓存结果。
 func (r *Response) ToBytes() (body []byte, err error) {
 	if r.Err != nil {
 		return nil, r.Err
@@ -370,13 +404,15 @@ func readResponseBody(body io.Reader, contentLength int64) ([]byte, error) {
 	return buf.Bytes(), err
 }
 
-// Dump return the string content that have been dumped for the request.
-// `Request.Dump` or `Request.DumpXXX` MUST have been called.
+// Dump returns the captured request and response dump.
+// Request.EnableDump or another request-level dump method must have been called first.
+// Dump 返回捕获的请求与响应 dump；调用前必须启用对应的请求级 dump。
 func (r *Response) Dump() string {
 	return r.Request.getDumpBuffer().String()
 }
 
 // GetStatus returns the response status.
+// GetStatus 返回响应状态文本；没有底层响应时返回空字符串。
 func (r *Response) GetStatus() string {
 	if r.Response == nil {
 		return ""
@@ -385,6 +421,7 @@ func (r *Response) GetStatus() string {
 }
 
 // GetStatusCode returns the response status code.
+// GetStatusCode 返回响应状态码；没有底层响应时返回 0。
 func (r *Response) GetStatusCode() int {
 	if r.Response == nil {
 		return 0
@@ -393,6 +430,7 @@ func (r *Response) GetStatusCode() int {
 }
 
 // GetHeader returns the response header value by key.
+// GetHeader 返回指定响应 Header 的首个值；没有底层响应时返回空字符串。
 func (r *Response) GetHeader(key string) string {
 	if r.Response == nil {
 		return ""
@@ -401,6 +439,7 @@ func (r *Response) GetHeader(key string) string {
 }
 
 // GetHeaderValues returns the response header values by key.
+// GetHeaderValues 返回指定响应 Header 的全部值；没有底层响应时返回 nil。
 func (r *Response) GetHeaderValues(key string) []string {
 	if r.Response == nil {
 		return nil
@@ -408,7 +447,8 @@ func (r *Response) GetHeaderValues(key string) []string {
 	return r.Header.Values(key)
 }
 
-// HeaderToString get all header as string.
+// HeaderToString serializes all response headers as an HTTP header block.
+// HeaderToString 将全部响应 Header 序列化为 HTTP Header 文本；没有底层响应时返回空字符串。
 func (r *Response) HeaderToString() string {
 	if r.Response == nil {
 		return ""

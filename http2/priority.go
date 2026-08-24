@@ -17,6 +17,8 @@ type PriorityParam struct {
 	Weight uint8
 }
 
+// IsZero reports whether all priority parameters have their zero values.
+// IsZero 报告所有优先级参数是否均为零值。
 func (p PriorityParam) IsZero() bool {
 	return p == PriorityParam{}
 }

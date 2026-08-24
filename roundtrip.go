@@ -17,6 +17,8 @@ import (
 //
 // Like the RoundTripper interface, the error types returned
 // by RoundTrip are unspecified.
+//
+// RoundTrip 实现 http.RoundTripper，执行一次 HTTP 事务，并处理 Alt-Svc 与响应体解码。
 func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
 	if t.wrappedRoundTrip != nil {
 		resp, err = t.wrappedRoundTrip.RoundTrip(req)

@@ -99,6 +99,7 @@ func normalizeBrowserOS(os BrowserOS) BrowserOS {
 }
 
 // RandomBrowserOS returns a random browser OS profile.
+// RandomBrowserOS 随机返回一个受支持的浏览器操作系统配置；随机源失败时返回 macOS。
 func RandomBrowserOS() BrowserOS {
 	n, err := rand.Int(rand.Reader, big.NewInt(int64(len(browserOSValues))))
 	if err != nil {

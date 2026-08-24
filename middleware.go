@@ -19,10 +19,12 @@ import (
 )
 
 type (
-	// RequestMiddleware type is for request middleware, called before a request is sent
+	// RequestMiddleware defines middleware called before a request is sent.
+	// RequestMiddleware 定义发送请求前调用的中间件函数。
 	RequestMiddleware func(client *Client, req *Request) error
 
-	// ResponseMiddleware type is for response middleware, called after a response has been received
+	// ResponseMiddleware defines middleware called after a response is received.
+	// ResponseMiddleware 定义收到响应后调用的中间件函数。
 	ResponseMiddleware func(client *Client, resp *Response) error
 )
 

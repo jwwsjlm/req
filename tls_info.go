@@ -23,6 +23,7 @@ type TLSInfo struct {
 }
 
 // TLSInfo returns TLS and certificate details for HTTPS responses.
+// TLSInfo 返回 HTTPS 响应的 TLS 与叶证书信息；非 TLS 响应返回 nil。
 func (r *Response) TLSInfo() *TLSInfo {
 	if r == nil || r.Response == nil || r.Response.TLS == nil {
 		return nil
@@ -31,6 +32,7 @@ func (r *Response) TLSInfo() *TLSInfo {
 }
 
 // TLSGrabber is an alias of TLSInfo, named after surf's similar helper.
+// TLSGrabber 是 TLSInfo 的兼容别名，其命名沿用 surf 的同类辅助方法。
 func (r *Response) TLSGrabber() *TLSInfo {
 	return r.TLSInfo()
 }
