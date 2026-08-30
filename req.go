@@ -87,15 +87,6 @@ type DownloadInfo struct {
 // DownloadCallback 是下载响应体过程中调用的进度回调。
 type DownloadCallback func(info DownloadInfo)
 
-func cloneSlice[T any](s []T) []T {
-	if len(s) == 0 {
-		return nil
-	}
-	ss := make([]T, len(s))
-	copy(ss, s)
-	return ss
-}
-
 func cloneUrlValues(v url.Values) url.Values {
 	if v == nil {
 		return nil
@@ -107,17 +98,6 @@ func cloneUrlValues(v url.Values) url.Values {
 		}
 	}
 	return vv
-}
-
-func cloneMap(h map[string]string) map[string]string {
-	if h == nil {
-		return nil
-	}
-	m := make(map[string]string)
-	for k, v := range h {
-		m[k] = v
-	}
-	return m
 }
 
 // convertHeaderToString converts http header to a string.

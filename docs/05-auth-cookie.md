@@ -19,7 +19,7 @@ client := req.C().SetCommonBearerAuthToken(token)
 其他入口：
 
 - `SetBasicAuth` / `SetCommonBasicAuth`
-- `SetDigestAuth` / `SetCommonDigestAuth`
+- `SetCommonDigestAuth`
 - `SetAuthSchemeToken` / `SetCommonAuthSchemeToken`
 - `SetAuthToken` / `SetCommonAuthToken`
 

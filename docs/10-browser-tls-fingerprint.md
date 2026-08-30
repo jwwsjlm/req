@@ -33,7 +33,6 @@ profile 会组合 Header、Header 顺序、HTTP/2 参数、HTTP/1.1/2 的 uTLS C
 | 明确允许 ALPN/H2 | `SetTLSFingerprintRandomizedALPN` |
 | 明确只模拟无 ALPN 的 H1 对端 | `SetTLSFingerprintRandomizedNoALPN` |
 | 可复现随机指纹 | 两种 `SetTLSFingerprintRandomized*WithSeed` |
-| JA3 | `SetTLSFingerprintJA3` |
 | uTLS ID | `SetTLSFingerprint` |
 | 自定义 spec | `SetTLSFingerprintSpecFactory` |
 | 捕获的 ClientHello | `ParseTLSClientHello` 后接 `SetTLSFingerprintSpecFactory` |
@@ -66,7 +65,7 @@ client.SetTLSFingerprintSpecFactory(func() *utls.ClientHelloSpec {
 })
 ```
 
-factory 必须每次返回全新且非 nil 的 spec。Transport 可并发建连，因此自定义 factory 也必须自行保护共享状态。旧的 `SetTLSFingerprintSpec` 保留兼容，但 uTLS 会在应用 preset 时修改对象，不适合跨多个新连接复用同一实例。nil factory 或 nil spec 会让握手返回明确错误，不会 panic。
+factory 必须每次返回全新且非 nil 的 spec。Transport 可并发建连，因此自定义 factory 也必须自行保护共享状态。nil factory 或 nil spec 会让握手返回明确错误，不会 panic。
 
 ### 从捕获的 ClientHello 创建 profile
 

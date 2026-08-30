@@ -23,7 +23,7 @@ Request 还可以通过 `OnAfterResponse` 注册单次响应 middleware。
 需要包裹完整 req round trip 时：
 
 ```go
-client.WrapRoundTripFunc(func(next req.RoundTripper) req.RoundTripFunc {
+client.WrapRoundTrip(func(next req.RoundTripper) req.RoundTripFunc {
 	return func(r *req.Request) (*req.Response, error) {
 		start := time.Now()
 		resp, err := next.RoundTrip(r)
@@ -33,7 +33,7 @@ client.WrapRoundTripFunc(func(next req.RoundTripper) req.RoundTripFunc {
 })
 ```
 
-这个层级拿到的是已经解析过的 request。若集成只认识标准库的组件，可通过 `client.GetTransport().WrapRoundTripFunc` 包裹 `http.RoundTripper`。
+这个层级拿到的是已经解析过的 request。若集成只认识标准库的组件，可通过 `client.GetTransport().WrapRoundTrip` 包裹 `http.RoundTripper`。
 
 ## Trace
 

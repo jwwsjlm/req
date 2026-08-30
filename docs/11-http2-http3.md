@@ -5,15 +5,15 @@
 默认 HTTPS 请求通过 TLS ALPN 在 HTTP/1.1 和 HTTP/2 之间协商。可显式选择：
 
 ```go
-client.EnableForceHTTP1()
-client.EnableForceHTTP2()
-client.DisableForceHttpVersion()
+client.Transport.EnableForceHTTP1()
+client.Transport.EnableForceHTTP2()
+client.Transport.DisableForceHttpVersion()
 ```
 
 H2C 是无 TLS 的 HTTP/2：
 
 ```go
-client.EnableH2C()
+client.Transport.EnableH2C()
 ```
 
 只有明确知道目标支持 h2c 时使用；公网 HTTPS 不需要它。
@@ -21,7 +21,7 @@ client.EnableH2C()
 ## HTTP/2 调优与指纹
 
 ```go
-client.SetHTTP2SettingsFrame(
+client.Transport.SetHTTP2SettingsFrame(
 	http2.Setting{ID: http2.SettingHeaderTableSize, Val: 65536},
 	http2.Setting{ID: http2.SettingInitialWindowSize, Val: 6291456},
 ).
@@ -46,16 +46,15 @@ client.SetHTTP2SettingsFrame(
 ## 启用 HTTP/3
 
 ```go
-client := req.C().
-	EnableHTTP3().
-	EnableHTTP3FallbackOnError().
-	SetHTTP3AltSvcFailureCooldown(30 * time.Second)
+client := req.C()
+client.Transport.EnableHTTP3()
+client.Transport.EnableHTTP3FallbackOnError().SetHTTP3AltSvcFailureCooldown(30 * time.Second)
 ```
 
 `EnableHTTP3` 建立 HTTP/3 能力和 Alt-Svc 状态；服务端可通过 Alt-Svc 引导后续请求使用 H3。`EnableForceHTTP3` 会对 HTTPS 强制尝试 H3：
 
 ```go
-client.EnableHTTP3FallbackOnError().EnableForceHTTP3()
+client.Transport.EnableHTTP3FallbackOnError().EnableForceHTTP3()
 ```
 
 建议先开启 fallback 再强制，除非业务明确要求 H3 失败直接返回错误。
@@ -69,7 +68,7 @@ client.EnableHTTP3FallbackOnError().EnableForceHTTP3()
 ## HTTP/3 SETTINGS、Datagram 与 Extended CONNECT
 
 ```go
-client.SetHTTP3AdditionalSetting(
+client.Transport.SetHTTP3AdditionalSetting(
 	req.HTTP3SettingQpackMaxTableCapacity,
 	65536,
 ).
@@ -82,7 +81,7 @@ client.SetHTTP3AdditionalSetting(
 Datagram 与 Extended CONNECT：
 
 ```go
-client.EnableHTTP3Datagrams().EnableHTTP3ExtendedConnect()
+client.Transport.EnableHTTP3Datagrams().EnableHTTP3ExtendedConnect()
 ```
 
 启用 Datagram 会同步 QUIC 层配置。只有上层协议真正需要时才开启。
@@ -92,13 +91,13 @@ client.EnableHTTP3Datagrams().EnableHTTP3ExtendedConnect()
 平衡性能 profile：
 
 ```go
-client.SetHTTP3QUICPerformanceProfile()
+client.Transport.SetHTTP3QUICPerformanceProfile()
 ```
 
 自定义：
 
 ```go
-client.SetHTTP3QUICConfig(&quic.Config{
+client.Transport.SetHTTP3QUICConfig(&quic.Config{
 	HandshakeIdleTimeout: 5 * time.Second,
 	MaxIdleTimeout:       45 * time.Second,
 	KeepAlivePeriod:      15 * time.Second,

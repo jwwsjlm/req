@@ -26,6 +26,7 @@ import (
 	"net/textproto"
 	"net/url"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -115,15 +116,12 @@ type Transport struct {
 	idleConnWait map[connectMethodKey]wantConnQueue  // waiting getConns
 	idleLRU      connLRU
 
-	reqMu       sync.Mutex
-	reqCanceler map[*http.Request]context.CancelCauseFunc
-
 	connsPerHostMu   sync.Mutex
 	connsPerHost     map[connectMethodKey]int
 	connsPerHostWait map[connectMethodKey]wantConnQueue // waiting getConns
 	dialsInProgress  wantConnQueue
 
-	altSvcJar        altsvc.Jar
+	altSvcJar        *altsvc.AltSvcJar
 	pendingAltSvcs   map[string]*pendingAltSvc
 	pendingAltSvcsMu sync.Mutex
 	http3AltSvcFails map[string]time.Time
@@ -162,12 +160,6 @@ type Transport struct {
 	tlsFingerprint              *utlsFingerprintConfig
 }
 
-// NewTransport returns a new Transport and is an alias of T.
-// NewTransport 返回新的 Transport，是 T 的别名。
-func NewTransport() *Transport {
-	return T()
-}
-
 // T creates a Transport with req's default connection and timeout settings.
 // T 使用 req 的默认连接池与超时配置创建 Transport。
 func T() *Transport {
@@ -197,28 +189,7 @@ func (fn HttpRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error)
 
 // HttpRoundTripWrapper is transport middleware function.
 // HttpRoundTripWrapper 定义包装底层 http.RoundTripper 的 transport 中间件。
-type HttpRoundTripWrapper func(rt http.RoundTripper) http.RoundTripper
-
-// HttpRoundTripWrapperFunc is transport middleware function, more convenient than HttpRoundTripWrapper.
-// HttpRoundTripWrapperFunc 是返回 HttpRoundTripFunc 的便捷 transport 中间件类型。
-type HttpRoundTripWrapperFunc func(rt http.RoundTripper) HttpRoundTripFunc
-
-func (f HttpRoundTripWrapperFunc) wrapper() HttpRoundTripWrapper {
-	return func(rt http.RoundTripper) http.RoundTripper {
-		return f(rt)
-	}
-}
-
-// WrapRoundTripFunc adds a transport middleware function that will give the caller
-// an opportunity to wrap the underlying http.RoundTripper.
-// WrapRoundTripFunc 按传入顺序添加便捷 transport 中间件，用于包装底层 http.RoundTripper。
-func (t *Transport) WrapRoundTripFunc(funcs ...HttpRoundTripWrapperFunc) *Transport {
-	var wrappers []HttpRoundTripWrapper
-	for _, fn := range funcs {
-		wrappers = append(wrappers, fn.wrapper())
-	}
-	return t.WrapRoundTrip(wrappers...)
-}
+type HttpRoundTripWrapper func(rt http.RoundTripper) HttpRoundTripFunc
 
 // WrapRoundTrip adds a transport middleware function that will give the caller
 // an opportunity to wrap the underlying http.RoundTripper.
@@ -858,7 +829,7 @@ func (t *Transport) readBufferSize() int {
 func (t *Transport) Clone() *Transport {
 	tt := &Transport{
 		Headers:                     t.Headers.Clone(),
-		Cookies:                     cloneSlice(t.Cookies),
+		Cookies:                     slices.Clone(t.Cookies),
 		Options:                     t.Options.Clone(),
 		disableAutoDecode:           t.disableAutoDecode,
 		autoDecodeContentType:       t.autoDecodeContentType,
@@ -906,9 +877,9 @@ func (t *Transport) Clone() *Transport {
 			WriteByteTimeout:           t.t2.WriteByteTimeout,
 			ConnectionFlow:             t.t2.ConnectionFlow,
 			InitialStreamID:            t.t2.InitialStreamID,
-			Settings:                   cloneSlice(t.t2.Settings),
+			Settings:                   slices.Clone(t.t2.Settings),
 			HeaderPriority:             t.t2.HeaderPriority,
-			PriorityFrames:             cloneSlice(t.t2.PriorityFrames),
+			PriorityFrames:             slices.Clone(t.t2.PriorityFrames),
 		}
 	}
 	tt.bindTLSFingerprint()
@@ -1280,12 +1251,6 @@ func (t *Transport) roundTrip(req *http.Request) (resp *http.Response, err error
 		go awaitLegacyCancel(ctx, cancel, origReq)
 	}
 
-	// Convert Transport.CancelRequest into context cancellation.
-	//
-	// This is lamentably expensive. CancelRequest has been deprecated for a long time
-	// and doesn't work on HTTP/2 requests. Perhaps we should drop support for it entirely.
-	cancel = t.prepareTransportCancel(origReq, cancel)
-
 	defer func() {
 		if err != nil {
 			cancel(err)
@@ -1327,8 +1292,7 @@ func (t *Transport) roundTrip(req *http.Request) (resp *http.Response, err error
 		}
 		if err == nil {
 			if pconn.alt != nil {
-				// HTTP/2 requests are not cancelable with CancelRequest,
-				// so we have no further need for the request context.
+				// The HTTP/2 round trip is complete, so this request context is no longer needed.
 				//
 				// On the HTTP/1 path, roundTrip takes responsibility for
 				// canceling the context after the response body is read.
@@ -1513,45 +1477,6 @@ func (t *Transport) CloseIdleConnections() {
 	}
 }
 
-// prepareTransportCancel sets up state to convert Transport.CancelRequest into context cancellation.
-func (t *Transport) prepareTransportCancel(req *http.Request, origCancel context.CancelCauseFunc) context.CancelCauseFunc {
-	// Historically, RoundTrip has not modified the Request in any way.
-	// We could avoid the need to keep a map of all in-flight requests by adding
-	// a field to the Request containing its cancel func, and setting that field
-	// while the request is in-flight. Callers aren't supposed to reuse a Request
-	// until after the response body is closed, so this wouldn't violate any
-	// concurrency guarantees.
-	cancel := func(err error) {
-		origCancel(err)
-		t.reqMu.Lock()
-		delete(t.reqCanceler, req)
-		t.reqMu.Unlock()
-	}
-	t.reqMu.Lock()
-	if t.reqCanceler == nil {
-		t.reqCanceler = make(map[*http.Request]context.CancelCauseFunc)
-	}
-	t.reqCanceler[req] = cancel
-	t.reqMu.Unlock()
-	return cancel
-}
-
-// CancelRequest cancels an in-flight request by closing its connection.
-// CancelRequest should only be called after [Transport.RoundTrip] has returned.
-//
-// Deprecated: Use [Request.WithContext] to create a request with a
-// cancelable context instead. CancelRequest cannot cancel HTTP/2
-// requests. This may become a no-op in a future release of Go.
-// CancelRequest 通过旧式取消机制取消进行中的请求；新代码应使用带可取消 context 的 http.Request。
-func (t *Transport) CancelRequest(req *http.Request) {
-	t.reqMu.Lock()
-	cancel := t.reqCanceler[req]
-	t.reqMu.Unlock()
-	if cancel != nil {
-		cancel(common.ErrRequestCanceled)
-	}
-}
-
 // resetProxyConfig is used by tests.
 func resetProxyConfig() {
 }
@@ -1578,7 +1503,7 @@ func (cm *connectMethod) proxyAuth() string {
 	if u := cm.proxyURL.User; u != nil {
 		username := u.Username()
 		password, _ := u.Password()
-		return "Basic " + basicAuth(username, password)
+		return util.BasicAuthHeaderValue(username, password)
 	}
 	return ""
 }
@@ -2590,7 +2515,7 @@ func (t *Transport) dialConn(ctx context.Context, cm connectMethod) (pconn *pers
 		}
 
 		if resp.StatusCode != 200 {
-			_, text, ok := util.CutString(resp.Status, " ")
+			_, text, ok := strings.Cut(resp.Status, " ")
 			conn.Close()
 			if !ok {
 				return nil, errors.New("unknown status code")
@@ -2826,14 +2751,14 @@ func (pc *persistConn) _readResponse(req *http.Request) (*http.Response, error) 
 		}
 		return nil, err
 	}
-	proto, status, ok := util.CutString(line, " ")
+	proto, status, ok := strings.Cut(line, " ")
 	if !ok {
 		return nil, badStringError("malformed HTTP response", line)
 	}
 	resp.Proto = proto
 	resp.Status = strings.TrimLeft(status, " ")
 
-	statusCode, _, _ := util.CutString(resp.Status, " ")
+	statusCode, _, _ := strings.Cut(resp.Status, " ")
 	if len(statusCode) != 3 {
 		return nil, badStringError("malformed HTTP status code", statusCode)
 	}
@@ -2896,7 +2821,7 @@ func (pc *persistConn) isBroken() bool {
 }
 
 // canceled returns non-nil if the connection was closed due to
-// CancelRequest or due to context cancellation.
+// request context cancellation.
 func (pc *persistConn) canceled() error {
 	pc.mu.Lock()
 	defer pc.mu.Unlock()

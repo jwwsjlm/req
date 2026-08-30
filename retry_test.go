@@ -145,14 +145,14 @@ func TestRetryWithUnreplayableBody(t *testing.T) {
 	tests.AssertEqual(t, errRetryableWithUnReplayableBody, err)
 }
 
-func TestRetryWithSetResult(t *testing.T) {
+func TestRetryWithSetSuccessResult(t *testing.T) {
 	headers := make(http.Header)
 	resp, err := tc().SetCommonCookies(&http.Cookie{
 		Name:  "test",
 		Value: "test",
 	}).R().
 		SetRetryCount(1).
-		SetResult(&headers).
+		SetSuccessResult(&headers).
 		Get("/header")
 	assertSuccess(t, resp, err)
 	tests.AssertEqual(t, "test=test", headers.Get("Cookie"))
@@ -253,7 +253,7 @@ func TestRetryClosesPreviousResponseBody(t *testing.T) {
 	var attempts int32
 
 	c := C()
-	c.Transport.WrapRoundTripFunc(func(rt http.RoundTripper) HttpRoundTripFunc {
+	c.Transport.WrapRoundTrip(func(rt http.RoundTripper) HttpRoundTripFunc {
 		return func(req *http.Request) (*http.Response, error) {
 			attempt := atomic.AddInt32(&attempts, 1)
 			statusCode := http.StatusServiceUnavailable
@@ -295,7 +295,7 @@ func TestRetryBackoffStopsWhenContextCancelled(t *testing.T) {
 	defer cancel()
 
 	c := C()
-	c.Transport.WrapRoundTripFunc(func(rt http.RoundTripper) HttpRoundTripFunc {
+	c.Transport.WrapRoundTrip(func(rt http.RoundTripper) HttpRoundTripFunc {
 		return func(req *http.Request) (*http.Response, error) {
 			atomic.AddInt32(&attempts, 1)
 			body := "retry body"

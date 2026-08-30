@@ -6,8 +6,8 @@
 
 | 场景 | API |
 | --- | --- |
-| Client | `C`、`NewClient`、`DefaultClient`、`SetDefaultClient`、`Client.Clone` |
-| Request | `Client.R`、`Client.NewRequest`、`R`、`NewRequest` |
+| Client | `C`、`DefaultClient`、`SetDefaultClient`、`Client.Clone` |
+| Request | `Client.R` |
 | 链式方法 builder | `Client.Get`、`Post`、`Put`、`Patch`、`Delete`、`Head`、`Options` |
 | 发送 | `Request.Get`、`Post`、`Put`、`Patch`、`Delete`、`Head`、`Options`、`Query`、`Send`、`Do` |
 | Must | `MustGet`、`MustPost`、`MustPut`、`MustPatch`、`MustDelete`、`MustHead`、`MustOptions`、`MustQuery` |
@@ -30,7 +30,7 @@
 | --- | --- |
 | Body | `SetBody`、`SetBodyBytes`、`SetBodyString`、`SetBodyJsonString`、`SetBodyJsonBytes`、`SetBodyJsonMarshal`、`SetBodyXmlString`、`SetBodyXmlBytes`、`SetBodyXmlMarshal` |
 | 元数据 | `SetContentType`、`SetContentLength`、`SetCommonContentType` |
-| Form | `SetFormData`、`SetFormDataAny`、`SetFormDataAnyType`、`SetFormDataFromValues`、`SetOrderedFormData` |
+| Form | `SetFormData`、`SetFormDataAnyType`、`SetFormDataFromValues`、`SetOrderedFormData` |
 | Multipart | `SetMultipartField`、`SetFile`、`SetFiles`、`SetFileBytes`、`SetFileReader`、`SetFileUpload`、`EnableForceMultipart`、`EnableForceChunkedEncoding` |
 | 结果 | `SetSuccessResult`、`SetErrorResult`、`SetCommonErrorResult`、`SuccessResult`、`ErrorResult`、`Into`、`Unmarshal`、`UnmarshalJson`、`UnmarshalXml` |
 | 状态 | `ResultState`、`IsSuccessState`、`IsErrorState`、`SetResultStateCheckFunc` |
@@ -42,7 +42,7 @@
 | Body | `String`、`Bytes`、`ToString`、`ToBytes`、`SetBody`、`SetBodyString` |
 | 状态/Header | `GetStatus`、`GetStatusCode`、`GetContentType`、`GetHeader`、`GetHeaderValues`、`HeaderToString` |
 | 时间 | `TotalTime`、`ReceivedAt`、`TraceInfo` |
-| TLS | `TLSInfo`、`TLSGrabber` |
+| TLS | `TLSInfo` |
 | Dump | `Dump` |
 
 ## 认证、Cookie 与重定向
@@ -50,7 +50,7 @@
 | 场景 | API |
 | --- | --- |
 | Token | `SetBearerAuthToken`、`SetAuthToken`、`SetAuthSchemeToken` 及 `SetCommon*` 版本 |
-| Basic/Digest | `SetBasicAuth`、`SetDigestAuth` 及 `SetCommon*` 版本 |
+| Basic/Digest | `SetBasicAuth`、`SetCommonBasicAuth`、`SetCommonDigestAuth` |
 | Cookie | `SetCookies`、`SetCommonCookies`、`SetCookieJar`、`SetCookieJarFactory`、`GetCookies`、`ClearCookies` |
 | Redirect | `SetRedirectPolicy`、`DefaultRedirectPolicy`、`MaxRedirectPolicy`、`NoRedirectPolicy`、`SameHostRedirectPolicy`、`SameDomainRedirectPolicy`、`AllowedHostRedirectPolicy`、`AllowedDomainRedirectPolicy` |
 | Redirect Header | `AlwaysCopyHeaderRedirectPolicy`、`SensitiveHeadersRedirectPolicy` |
@@ -80,8 +80,8 @@
 | 场景 | API |
 | --- | --- |
 | Middleware | `OnBeforeRequest`、`OnAfterResponse`、`Request.OnAfterResponse`、`OnError` |
-| req round trip | `WrapRoundTrip`、`WrapRoundTripFunc`、`RoundTripper`、`RoundTripFunc` |
-| http round trip | `Transport.WrapRoundTrip`、`Transport.WrapRoundTripFunc`、`HttpRoundTripFunc` |
+| req round trip | `WrapRoundTrip`、`RoundTripper`、`RoundTripFunc` |
+| http round trip | `Transport.WrapRoundTrip`、`HttpRoundTripFunc` |
 | Trace | `EnableTrace`、`DisableTrace`、`EnableTraceAll`、`DisableTraceAll`、`TraceInfo`、`TraceInfo.Blame` |
 | Dump | `EnableDump`、`EnableDumpTo`、`EnableDumpToFile`、`EnableDumpAll*`、`EnableDumpEachRequest*`、`SetDumpOptions`、`SetCommonDumpOptions` |
 | Logger | `SetLogger`、`GetLogger`、`NewLogger`、`NewLoggerFromStandardLogger` |
@@ -101,7 +101,7 @@
 | 场景 | API |
 | --- | --- |
 | 浏览器 | `ImpersonateChrome`、`ImpersonateChromeWithOS`、`ImpersonateChromeRandomOS`、Firefox 对应方法、`ImpersonateSafari`、`RandomBrowserOS` |
-| TLS 指纹 | `SetTLSFingerprint`、`SetTLSFingerprintJA3`、`SetTLSFingerprintSpec`、`SetTLSFingerprintSpecFactory`、`SetTLSFingerprintRandomizedALPN`、`SetTLSFingerprintRandomizedNoALPN`、两种 `WithSeed`、各内置 preset |
+| TLS 指纹 | `SetTLSFingerprint`、`SetTLSFingerprintSpecFactory`、`SetTLSFingerprintRandomizedALPN`、`SetTLSFingerprintRandomizedNoALPN`、两种 `WithSeed`、各内置 preset |
 | ClientHello 导入 | `ParseTLSClientHello` |
 | 证书/TLS | `SetTLSClientConfig`、`GetTLSClientConfig`、`SetRootCertFromString`、`SetRootCertsFromFile`、`SetCertFromFile`、`SetCerts`、`EnableInsecureSkipVerify` |
 | HTTP 版本 | `EnableForceHTTP1`、`EnableForceHTTP2`、`EnableForceHTTP3`、`DisableForceHttpVersion`、`EnableH2C`、`EnableHTTP3`、`DisableHTTP3` |

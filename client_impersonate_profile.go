@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"math/big"
 	"net/http"
+	"slices"
 )
 
 // BrowserOS identifies the operating system used by a browser impersonation profile.
@@ -140,7 +141,7 @@ func (p *browserHeaderProfile) apply(c *Client, r *Request) {
 
 	if len(r.Headers[HeaderOderKey]) == 0 {
 		if order := p.headerOrders[method]; len(order) > 0 {
-			r.Headers[HeaderOderKey] = cloneSlice(order)
+			r.Headers[HeaderOderKey] = slices.Clone(order)
 		}
 	}
 
@@ -150,7 +151,7 @@ func (p *browserHeaderProfile) apply(c *Client, r *Request) {
 	}
 	if len(r.Headers[PseudoHeaderOderKey]) == 0 {
 		if order := pseudoOrders[method]; len(order) > 0 {
-			r.Headers[PseudoHeaderOderKey] = cloneSlice(order)
+			r.Headers[PseudoHeaderOderKey] = slices.Clone(order)
 		}
 	}
 }

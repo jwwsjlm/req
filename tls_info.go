@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"fmt"
+	"slices"
 )
 
 // TLSInfo contains TLS and leaf certificate details from a response.
@@ -31,12 +32,6 @@ func (r *Response) TLSInfo() *TLSInfo {
 	return newTLSInfo(r.Response.TLS)
 }
 
-// TLSGrabber is an alias of TLSInfo, named after surf's similar helper.
-// TLSGrabber 是 TLSInfo 的兼容别名，其命名沿用 surf 的同类辅助方法。
-func (r *Response) TLSGrabber() *TLSInfo {
-	return r.TLSInfo()
-}
-
 func newTLSInfo(cs *tls.ConnectionState) *TLSInfo {
 	if cs == nil || len(cs.PeerCertificates) == 0 {
 		return nil
@@ -45,11 +40,11 @@ func newTLSInfo(cs *tls.ConnectionState) *TLSInfo {
 	sum := sha256.Sum256(cert.Raw)
 	return &TLSInfo{
 		CommonName:               cert.Subject.CommonName,
-		DNSNames:                 cloneSlice(cert.DNSNames),
-		Emails:                   cloneSlice(cert.EmailAddresses),
+		DNSNames:                 slices.Clone(cert.DNSNames),
+		Emails:                   slices.Clone(cert.EmailAddresses),
 		IssuerCommonName:         cert.Issuer.CommonName,
-		IssuerOrganizations:      cloneSlice(cert.Issuer.Organization),
-		Organizations:            cloneSlice(cert.Subject.Organization),
+		IssuerOrganizations:      slices.Clone(cert.Issuer.Organization),
+		Organizations:            slices.Clone(cert.Subject.Organization),
 		ServerName:               cs.ServerName,
 		FingerprintSHA256:        hex.EncodeToString(sum[:]),
 		FingerprintSHA256OpenSSL: opensslFingerprint(sum[:]),

@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/icholy/digest"
-	"github.com/jwwsjlm/req/v3/internal/header"
 )
 
 // cchal is a cached challenge and the number of times it's been used.
@@ -73,8 +72,8 @@ func (da *digestAuth) prepare(req *http.Request) error {
 	return nil
 }
 
-func (da *digestAuth) HttpRoundTripWrapperFunc(rt http.RoundTripper) HttpRoundTripFunc {
-	return func(req *http.Request) (resp *http.Response, err error) {
+func (da *digestAuth) HttpRoundTripWrapper(rt http.RoundTripper) HttpRoundTripFunc {
+	return HttpRoundTripFunc(func(req *http.Request) (resp *http.Response, err error) {
 		clone, err := cloner(req)
 		if err != nil {
 			return nil, err
@@ -132,61 +131,7 @@ func (da *digestAuth) HttpRoundTripWrapperFunc(rt http.RoundTripper) HttpRoundTr
 		}
 
 		return rt.RoundTrip(second)
-	}
-}
-
-// create response middleware for http digest authentication.
-func handleDigestAuthFunc(username, password string) ResponseMiddleware {
-	return func(client *Client, resp *Response) error {
-		if resp.Err != nil || resp.StatusCode != http.StatusUnauthorized {
-			return nil
-		}
-		auth, err := createDigestAuth(resp.Request.RawRequest, resp.Response, username, password)
-		if err != nil {
-			return err
-		}
-		r := resp.Request
-		req := *r.RawRequest
-		if req.Body != nil {
-			err = parseRequestBody(client, r) // re-setup body
-			if err != nil {
-				return err
-			}
-			if r.GetBody != nil {
-				body, err := r.GetBody()
-				if err != nil {
-					return err
-				}
-				req.Body = body
-				req.GetBody = r.GetBody
-			}
-		}
-		if req.Header == nil {
-			req.Header = make(http.Header)
-		}
-		req.Header.Set(header.Authorization, auth)
-		resp.Response, err = client.httpClient.Do(&req)
-		return err
-	}
-}
-
-func createDigestAuth(req *http.Request, resp *http.Response, username, password string) (auth string, err error) {
-	chal, err := digest.FindChallenge(resp.Header)
-	if err != nil {
-		return "", err
-	}
-	cred, err := digest.Digest(chal, digest.Options{
-		Username: username,
-		Password: password,
-		Method:   req.Method,
-		URI:      req.URL.RequestURI(),
-		GetBody:  req.GetBody,
-		Count:    1,
 	})
-	if err != nil {
-		return "", err
-	}
-	return cred.String(), nil
 }
 
 // cloner returns a function which makes clones of the provided request

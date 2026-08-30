@@ -64,7 +64,7 @@ client.SetHosts(map[string]string{
 
 ```go
 dialer := &net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}
-client.SetDial(func(ctx context.Context, network, address string) (net.Conn, error) {
+client.Transport.SetDial(func(ctx context.Context, network, address string) (net.Conn, error) {
 	return dialer.DialContext(ctx, network, address)
 })
 ```

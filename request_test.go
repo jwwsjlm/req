@@ -192,7 +192,8 @@ func testEnableDump(t *testing.T, fn func(r *Request) (de dumpExpected)) {
 	}
 	c := tc()
 	testDump(c)
-	testDump(c.EnableForceHTTP1())
+	c.Transport.EnableForceHTTP1()
+	testDump(c)
 }
 
 func TestEnableDump(t *testing.T) {
@@ -393,7 +394,7 @@ func TestSetSuccessResult(t *testing.T) {
 	user = nil
 	resp, err = c.R().SetSuccessResult(user).Get(url)
 	assertSuccess(t, resp, err)
-	tests.AssertEqual(t, "imroc", resp.Result().(*UserInfo).Username)
+	tests.AssertEqual(t, "imroc", resp.SuccessResult().(*UserInfo).Username)
 }
 
 func TestSetBody(t *testing.T) {
@@ -555,7 +556,7 @@ func TestRequestRestyInspiredSetters(t *testing.T) {
 func TestPathRawParam(t *testing.T) {
 	c := tc()
 	var rawPath string
-	c.WrapRoundTripFunc(func(rt RoundTripper) RoundTripFunc {
+	c.WrapRoundTrip(func(rt RoundTripper) RoundTripFunc {
 		return func(req *Request) (*Response, error) {
 			rawPath = req.URL.EscapedPath()
 			return &Response{
@@ -575,7 +576,7 @@ func TestPathRawParam(t *testing.T) {
 
 	c = tc()
 	var escapedPath string
-	c.WrapRoundTripFunc(func(rt RoundTripper) RoundTripFunc {
+	c.WrapRoundTrip(func(rt RoundTripper) RoundTripFunc {
 		return func(req *Request) (*Response, error) {
 			escapedPath = req.URL.EscapedPath()
 			return &Response{
@@ -596,7 +597,7 @@ func TestPathRawParam(t *testing.T) {
 
 func TestSetContentLength(t *testing.T) {
 	var contentLength int64
-	c := tc().WrapRoundTripFunc(func(rt RoundTripper) RoundTripFunc {
+	c := tc().WrapRoundTrip(func(rt RoundTripper) RoundTripFunc {
 		return func(req *Request) (*Response, error) {
 			resp, err := rt.RoundTrip(req)
 			contentLength = req.RawRequest.ContentLength
@@ -641,7 +642,8 @@ func testHeader(t *testing.T, c *Client) {
 func TestSetHeaderNonCanonical(t *testing.T) {
 	// set headers
 	key := "spring.cloud.function.Routing-expression"
-	c := tc().EnableForceHTTP1()
+	c := tc()
+	c.Transport.EnableForceHTTP1()
 	resp, err := c.R().EnableDumpWithoutResponse().
 		SetHeadersNonCanonical(map[string]string{
 			key: "test",
@@ -779,7 +781,9 @@ func testQueryParam(t *testing.T, c *Client) {
 
 func TestPathParam(t *testing.T) {
 	testPathParam(t, tc())
-	testPathParam(t, tc().EnableForceHTTP1())
+	c := tc()
+	c.Transport.EnableForceHTTP1()
+	testPathParam(t, c)
 }
 
 func testPathParam(t *testing.T, c *Client) {
@@ -849,7 +853,7 @@ func testError(t *testing.T, c *Client) {
 		SetQueryParam("username", "").
 		Get("/search")
 	assertIsError(t, resp, err)
-	em, ok := resp.Error().(*ErrorMessage)
+	em, ok := resp.ErrorResult().(*ErrorMessage)
 	tests.AssertEqual(t, true, ok)
 	tests.AssertEqual(t, 10000, em.ErrorCode)
 }
@@ -1092,7 +1096,9 @@ func TestMultipartReaderCannotBeRetried(t *testing.T) {
 }
 
 func TestFixPragmaCache(t *testing.T) {
-	resp, err := tc().EnableForceHTTP1().R().Get("/pragma")
+	c := tc()
+	c.Transport.EnableForceHTTP1()
+	resp, err := c.R().Get("/pragma")
 	assertSuccess(t, resp, err)
 	tests.AssertEqual(t, "no-cache", resp.Header.Get("Cache-Control"))
 }

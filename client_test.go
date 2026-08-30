@@ -44,7 +44,7 @@ func TestRetryCancelledContext(t *testing.T) {
 
 func TestWrapRoundTrip(t *testing.T) {
 	i, j, a, b := 0, 0, 0, 0
-	c := tc().WrapRoundTripFunc(func(rt RoundTripper) RoundTripFunc {
+	c := tc().WrapRoundTrip(func(rt RoundTripper) RoundTripFunc {
 		return func(req *Request) (resp *Response, err error) {
 			a = 1
 			resp, err = rt.RoundTrip(req)
@@ -52,7 +52,7 @@ func TestWrapRoundTrip(t *testing.T) {
 			return
 		}
 	})
-	c.GetTransport().WrapRoundTripFunc(func(rt http.RoundTripper) HttpRoundTripFunc {
+	c.GetTransport().WrapRoundTrip(func(rt http.RoundTripper) HttpRoundTripFunc {
 		return func(req *http.Request) (resp *http.Response, err error) {
 			i = 1
 			resp, err = rt.RoundTrip(req)
@@ -152,12 +152,11 @@ func TestSetHosts(t *testing.T) {
 	ip, port, err := net.SplitHostPort(ts.Listener.Addr().String())
 	tests.AssertNoError(t, err)
 
-	c := C().
-		EnableInsecureSkipVerify().
-		EnableForceHTTP1().
-		SetHosts(map[string]string{
-			"Custom.Example": ip, // case-insensitive match
-		})
+	c := C().EnableInsecureSkipVerify()
+	c.Transport.EnableForceHTTP1()
+	c.SetHosts(map[string]string{
+		"Custom.Example": ip, // case-insensitive match
+	})
 
 	resp, err := c.R().Get(fmt.Sprintf("https://custom.example:%s/", port))
 	assertSuccess(t, resp, err)
@@ -176,12 +175,11 @@ func TestSetHostsHTTP2(t *testing.T) {
 	ip, port, err := net.SplitHostPort(ts.Listener.Addr().String())
 	tests.AssertNoError(t, err)
 
-	c := C().
-		EnableInsecureSkipVerify().
-		EnableForceHTTP2().
-		SetHosts(map[string]string{
-			"h2.example": ip,
-		})
+	c := C().EnableInsecureSkipVerify()
+	c.Transport.EnableForceHTTP2()
+	c.SetHosts(map[string]string{
+		"h2.example": ip,
+	})
 
 	resp, err := c.R().Get(fmt.Sprintf("https://h2.example:%s/", port))
 	assertSuccess(t, resp, err)
@@ -233,7 +231,9 @@ func TestSetHostsIgnoresCallerMapMutation(t *testing.T) {
 	tests.AssertNoError(t, err)
 
 	hosts := map[string]string{"static.example": ip}
-	c := C().EnableInsecureSkipVerify().EnableForceHTTP1().SetHosts(hosts)
+	c := C().EnableInsecureSkipVerify()
+	c.Transport.EnableForceHTTP1()
+	c.SetHosts(hosts)
 	// Mutating the original map after SetHosts must not affect the client.
 	delete(hosts, "static.example")
 	hosts["static.example"] = "0.0.0.0"
@@ -247,11 +247,11 @@ func TestSetHostsReplacedBySetDial(t *testing.T) {
 	called := false
 	c := C().
 		SetTimeout(2 * time.Second).
-		SetHosts(map[string]string{"x.example": "127.0.0.1"}).
-		SetDial(func(ctx context.Context, network, addr string) (net.Conn, error) {
-			called = true
-			return nil, errors.New("custom dial")
-		})
+		SetHosts(map[string]string{"x.example": "127.0.0.1"})
+	c.Transport.SetDial(func(ctx context.Context, network, addr string) (net.Conn, error) {
+		called = true
+		return nil, errors.New("custom dial")
+	})
 
 	_, err := c.R().Get("https://x.example/")
 	tests.AssertNotNil(t, err)
@@ -513,7 +513,7 @@ func TestRestyInspiredCommonSetters(t *testing.T) {
 	tests.AssertEqual(t, "OAuth token", c.Headers.Get("Authorization"))
 
 	var gotPath string
-	c.WrapRoundTripFunc(func(rt RoundTripper) RoundTripFunc {
+	c.WrapRoundTrip(func(rt RoundTripper) RoundTripFunc {
 		return func(req *Request) (*Response, error) {
 			gotPath = req.URL.Path
 			return &Response{
@@ -555,28 +555,34 @@ func TestSetUserAgent(t *testing.T) {
 }
 
 func TestAutoDecode(t *testing.T) {
-	c := tc().DisableAutoDecode()
+	c := tc()
+	c.Transport.DisableAutoDecode()
 	resp, err := c.R().Get("/gbk")
 	assertSuccess(t, resp, err)
 	tests.AssertEqual(t, toGbk("我是roc"), resp.Bytes())
 
-	resp, err = c.EnableAutoDecode().R().Get("/gbk")
+	c.Transport.EnableAutoDecode()
+	resp, err = c.R().Get("/gbk")
 	assertSuccess(t, resp, err)
 	tests.AssertEqual(t, "我是roc", resp.String())
 
-	resp, err = c.SetAutoDecodeContentType("html").R().Get("/gbk")
+	c.Transport.SetAutoDecodeContentType("html")
+	resp, err = c.R().Get("/gbk")
 	assertSuccess(t, resp, err)
 	tests.AssertEqual(t, toGbk("我是roc"), resp.Bytes())
-	resp, err = c.SetAutoDecodeContentType("text").R().Get("/gbk")
+	c.Transport.SetAutoDecodeContentType("text")
+	resp, err = c.R().Get("/gbk")
 	assertSuccess(t, resp, err)
 	tests.AssertEqual(t, "我是roc", resp.String())
-	resp, err = c.SetAutoDecodeContentTypeFunc(func(contentType string) bool {
+	c.Transport.SetAutoDecodeContentTypeFunc(func(contentType string) bool {
 		return strings.Contains(contentType, "text")
-	}).R().Get("/gbk")
+	})
+	resp, err = c.R().Get("/gbk")
 	assertSuccess(t, resp, err)
 	tests.AssertEqual(t, "我是roc", resp.String())
 
-	resp, err = c.SetAutoDecodeAllContentType().R().Get("/gbk-no-charset")
+	c.Transport.SetAutoDecodeAllContentType()
+	resp, err = c.R().Get("/gbk-no-charset")
 	assertSuccess(t, resp, err)
 	tests.AssertContains(t, resp.String(), "我是roc", true)
 }
@@ -691,23 +697,26 @@ func TestInsecureSkipVerify(t *testing.T) {
 
 func TestSetTLSClientConfig(t *testing.T) {
 	config := &tls.Config{InsecureSkipVerify: true}
-	c := tc().SetTLSClientConfig(config)
+	c := tc()
+	c.Transport.SetTLSClientConfig(config)
 	tests.AssertEqual(t, config, c.TLSClientConfig)
 }
 
 func TestCompression(t *testing.T) {
-	c := tc().DisableCompression()
+	c := tc()
+	c.Transport.DisableCompression = true
 	tests.AssertEqual(t, true, c.Transport.DisableCompression)
 
-	c.EnableCompression()
+	c.Transport.DisableCompression = false
 	tests.AssertEqual(t, false, c.Transport.DisableCompression)
 }
 
 func TestKeepAlives(t *testing.T) {
-	c := tc().DisableKeepAlives()
+	c := tc()
+	c.Transport.DisableKeepAlives = true
 	tests.AssertEqual(t, true, c.Transport.DisableKeepAlives)
 
-	c.EnableKeepAlives()
+	c.Transport.DisableKeepAlives = false
 	tests.AssertEqual(t, false, c.Transport.DisableKeepAlives)
 }
 
@@ -937,7 +946,8 @@ func testEnableDumpAll(t *testing.T, fn func(c *Client) (de dumpExpected)) {
 	}
 	c := tc()
 	testDump(c)
-	testDump(c.EnableForceHTTP1())
+	c.Transport.EnableForceHTTP1()
+	testDump(c)
 }
 
 func TestEnableDumpAll(t *testing.T) {
@@ -1098,20 +1108,12 @@ func TestSetCookieJarFactoryAcceptsHTTPJar(t *testing.T) {
 	tests.AssertEqual(t, true, c.httpClient.Jar == jar)
 }
 
-func TestSetCookieJarFactoryAcceptsLegacyJar(t *testing.T) {
-	jar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
-	c := C().SetCookieJarFactory(func() *cookiejar.Jar {
-		return jar
-	})
-	tests.AssertEqual(t, true, c.httpClient.Jar == jar)
-}
-
 func TestSetDNSResolver(t *testing.T) {
 	resolver := &net.Resolver{PreferGo: true}
 	c := C().SetDNSResolver(resolver)
 	tests.AssertEqual(t, true, c.Transport.Resolver == resolver)
 
-	c.EnableHTTP3()
+	c.Transport.EnableHTTP3()
 	tests.AssertEqual(t, true, c.Transport.t3.Resolver == resolver)
 
 	clone := c.Clone()
@@ -1120,7 +1122,8 @@ func TestSetDNSResolver(t *testing.T) {
 }
 
 func TestSetDNSResolverAfterHTTP3Enabled(t *testing.T) {
-	c := C().EnableHTTP3()
+	c := C()
+	c.Transport.EnableHTTP3()
 	resolver := &net.Resolver{PreferGo: true}
 	c.SetDNSResolver(resolver)
 	tests.AssertEqual(t, true, c.Transport.t3.Resolver == resolver)
@@ -1150,7 +1153,7 @@ func TestResponseTLSInfo(t *testing.T) {
 	tests.AssertEqual(t, true, info.Version != "")
 	tests.AssertEqual(t, 64, len(info.FingerprintSHA256))
 	tests.AssertEqual(t, true, strings.Contains(info.FingerprintSHA256OpenSSL, ":"))
-	tests.AssertEqual(t, info.FingerprintSHA256, resp.TLSGrabber().FingerprintSHA256)
+	tests.AssertEqual(t, info.FingerprintSHA256, resp.TLSInfo().FingerprintSHA256)
 }
 
 func TestResponseTLSInfoHTTPNil(t *testing.T) {
@@ -1162,22 +1165,6 @@ func TestResponseTLSInfoHTTPNil(t *testing.T) {
 	resp, err := C().R().Get(server.URL)
 	assertSuccess(t, resp, err)
 	tests.AssertIsNil(t, resp.TLSInfo())
-	tests.AssertIsNil(t, resp.TLSGrabber())
-}
-
-func TestSetTLSFingerprintSpec(t *testing.T) {
-	clientHelloSpec, err := utls.UTLSIdToSpec(utls.HelloChrome_Auto)
-	tests.AssertNoError(t, err)
-
-	c := C().SetTLSFingerprintSpec(&clientHelloSpec)
-	tests.AssertEqual(t, true, c.Transport.TLSHandshakeContext != nil)
-}
-
-func TestSetTLSFingerprintJA3(t *testing.T) {
-	const ja3 = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-5-10-11-13-16-18-21-23-27-35-43-45-51-17513-65281,29-23-24,0"
-
-	c := C().SetTLSFingerprintJA3(ja3, "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:120.0) Gecko/20100101 Firefox/120.0", false)
-	tests.AssertEqual(t, true, c.Transport.TLSHandshakeContext != nil)
 }
 
 func TestHTTP3AdvancedSettings(t *testing.T) {
@@ -1185,7 +1172,8 @@ func TestHTTP3AdvancedSettings(t *testing.T) {
 		HTTP3SettingQpackMaxTableCapacity: 65536,
 	}
 
-	c := C().
+	c := C()
+	c.Transport.
 		SetHTTP3AdditionalSettings(settings).
 		SetHTTP3AdditionalSetting(HTTP3SettingQpackBlockedStreams, 100).
 		EnableHTTP3Datagrams().
@@ -1221,9 +1209,8 @@ func TestHTTP3TLSConfigPropagation(t *testing.T) {
 		ServerName:         "base.example",
 		NextProtos:         []string{"h2", "http/1.1"},
 	}
-	c := C().
-		SetTLSClientConfig(base).
-		EnableHTTP3()
+	c := C()
+	c.Transport.SetTLSClientConfig(base).EnableHTTP3()
 
 	tests.AssertEqual(t, base, c.Transport.t3.TLSClientConfig)
 	tests.AssertEqual(t, true, c.Transport.t3.TLSClientConfig.InsecureSkipVerify)
@@ -1232,18 +1219,19 @@ func TestHTTP3TLSConfigPropagation(t *testing.T) {
 		ServerName: "h3.example",
 		MinVersion: tls.VersionTLS13,
 	}
-	c.SetHTTP3TLSClientConfig(http3Config)
+	c.Transport.SetHTTP3TLSClientConfig(http3Config)
 	http3Config.ServerName = "mutated.example"
 
 	tests.AssertEqual(t, "h3.example", c.Transport.http3TLSClientConfig.ServerName)
 	tests.AssertEqual(t, "h3.example", c.Transport.t3.TLSClientConfig.ServerName)
 
-	c.SetHTTP3TLSClientConfig(nil)
+	c.Transport.SetHTTP3TLSClientConfig(nil)
 	tests.AssertEqual(t, base, c.Transport.t3.TLSClientConfig)
 }
 
 func TestHTTP3TLSChromeProfile(t *testing.T) {
-	c := C().
+	c := C()
+	c.Transport.
 		SetHTTP3TLSClientConfig(&tls.Config{ServerName: "h3.example"}).
 		SetHTTP3TLSChromeProfile().
 		EnableHTTP3()
@@ -1266,7 +1254,8 @@ func TestHTTP3TLSChromeProfile(t *testing.T) {
 }
 
 func TestHTTP3FallbackOnError(t *testing.T) {
-	c := tc().
+	c := tc()
+	c.Transport.
 		EnableHTTP3FallbackOnError().
 		EnableForceHTTP3()
 
@@ -1280,13 +1269,14 @@ func TestHTTP3FallbackOnError(t *testing.T) {
 
 	clone := c.Clone()
 	tests.AssertEqual(t, true, clone.Transport.http3FallbackOnFailure)
-	c.DisableHTTP3FallbackOnError()
+	c.Transport.DisableHTTP3FallbackOnError()
 	tests.AssertEqual(t, false, c.Transport.http3FallbackOnFailure)
 }
 
 func TestHTTP3AltSvcFallbackOnError(t *testing.T) {
-	c := tc().
-		EnableHTTP3().
+	c := tc()
+	c.Transport.EnableHTTP3()
+	c.Transport.
 		EnableHTTP3FallbackOnError().
 		SetHTTP3AltSvcFailureCooldown(time.Minute)
 
@@ -1316,8 +1306,9 @@ func TestHTTP3AltSvcFallbackOnError(t *testing.T) {
 }
 
 func TestCloneHTTP3AltSvcFailuresConcurrent(t *testing.T) {
-	c := C().
-		EnableHTTP3().
+	c := C()
+	c.Transport.EnableHTTP3()
+	c.Transport.
 		EnableHTTP3FallbackOnError().
 		SetHTTP3AltSvcFailureCooldown(time.Minute)
 
@@ -1345,10 +1336,11 @@ func TestCloneHTTP3AltSvcFailuresConcurrent(t *testing.T) {
 }
 
 func TestHTTP3QUICPerformanceProfile(t *testing.T) {
-	c := C().
+	c := C()
+	c.Transport.
 		SetHTTP3QUICPerformanceProfile().
-		EnableHTTP3Datagrams().
-		EnableHTTP3()
+		EnableHTTP3Datagrams()
+	c.Transport.EnableHTTP3()
 
 	cfg := c.Transport.http3QUICConfig
 	tests.AssertNotNil(t, cfg)
@@ -1391,7 +1383,8 @@ func TestHTTP3GreaseSettingUsesQUICVarInt(t *testing.T) {
 }
 
 func TestHTTP2InitialStreamIDConfig(t *testing.T) {
-	c := C().SetHTTP2InitialStreamID(3)
+	c := C()
+	c.Transport.SetHTTP2InitialStreamID(3)
 	tests.AssertEqual(t, uint32(3), c.Transport.t2.InitialStreamID)
 
 	clone := c.Clone()
@@ -1401,7 +1394,7 @@ func TestHTTP2InitialStreamIDConfig(t *testing.T) {
 func captureProfileHeaders(t *testing.T, c *Client, method string) http.Header {
 	t.Helper()
 	var captured http.Header
-	c.WrapRoundTripFunc(func(rt RoundTripper) RoundTripFunc {
+	c.WrapRoundTrip(func(rt RoundTripper) RoundTripFunc {
 		return func(r *Request) (*Response, error) {
 			captured = r.Headers.Clone()
 			return &Response{
@@ -1501,7 +1494,8 @@ func TestImpersonateFirefoxAdvancedProfile(t *testing.T) {
 }
 
 func TestImpersonateFirefoxHTTP3PseudoHeaderOrder(t *testing.T) {
-	c := C().ImpersonateFirefox().EnableForceHTTP3()
+	c := C().ImpersonateFirefox()
+	c.Transport.EnableForceHTTP3()
 	hdr := captureProfileHeaders(t, c, http.MethodGet)
 
 	tests.AssertEqual(t, ":method", hdr[PseudoHeaderOderKey][0])

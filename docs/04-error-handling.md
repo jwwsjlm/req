@@ -40,7 +40,7 @@ if resp.IsErrorState() {
 }
 ```
 
-多个接口共用错误结构时用 `Client.SetCommonErrorResult`。旧的 `SetError`、`SetCommonError`、`Response.Error` 仍保留，但新代码优先使用带 `Result` 后缀的方法。
+多个接口共用错误结构时用 `Client.SetCommonErrorResult`。旧的 `SetErrorResult`、`SetCommonErrorResult`、`Response.ErrorResult` 仍保留，但新代码优先使用带 `Result` 后缀的方法。
 
 ## 自定义结果状态
 

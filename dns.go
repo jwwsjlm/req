@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"slices"
 	"time"
 )
 
@@ -139,7 +140,7 @@ func NewDNSOverTLSResolver(provider DNSOverTLSProvider) *net.Resolver {
 }
 
 func dnsOverTLSDialer(provider DNSOverTLSProvider) func(context.Context, string, string) (net.Conn, error) {
-	addresses := cloneSlice(provider.Addresses)
+	addresses := slices.Clone(provider.Addresses)
 	return func(ctx context.Context, _, _ string) (net.Conn, error) {
 		if provider.ServerName == "" {
 			return nil, errors.New("req: DNS-over-TLS provider ServerName is empty")

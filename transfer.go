@@ -130,7 +130,7 @@ func newTransferWriter(r *http.Request) (t *transferWriter, err error) {
 //
 // The only reason we'd send such a request is if the user set the Body to a
 // non-nil value (say, io.NopCloser(bytes.NewReader(nil))) and didn't
-// set ContentLength, or NewRequest set it to -1 (unknown), so then we assume
+// set ContentLength, or request construction set it to -1 (unknown), so then we assume
 // there's bytes to send.
 //
 // This code tries to read a byte from the Request.Body in such cases to see

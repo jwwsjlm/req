@@ -3,6 +3,7 @@ package req
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"maps"
 	"math/big"
 	"net/http"
 	"strconv"
@@ -180,7 +181,7 @@ var (
 
 func chromeBrowserProfile(os BrowserOS) *browserHeaderProfile {
 	os = normalizeBrowserOS(os)
-	baseHeaders := cloneMap(chromeBaseHeaders)
+	baseHeaders := maps.Clone(chromeBaseHeaders)
 	baseHeaders["sec-ch-ua-mobile"] = "?0"
 	if browserOSIsMobile(os) {
 		baseHeaders["sec-ch-ua-mobile"] = "?1"
@@ -207,8 +208,8 @@ func (c *Client) ImpersonateChrome() *Client {
 func (c *Client) ImpersonateChromeWithOS(os BrowserOS) *Client {
 	profile := chromeBrowserProfile(os)
 	c.setBrowserProfile(profile)
-	c.
-		SetTLSFingerprint(utls.HelloChrome_133).
+	c.SetTLSFingerprint(utls.HelloChrome_133)
+	c.Transport.
 		SetHTTP2SettingsFrame(chromeHttp2Settings...).
 		SetHTTP2ConnectionFlow(15663105).
 		SetHTTP2HeaderPriority(chromeHeaderPriority).
@@ -220,8 +221,8 @@ func (c *Client) ImpersonateChromeWithOS(os BrowserOS) *Client {
 		}).
 		SetHTTP3MaxResponseHeaderBytes(262144).
 		EnableHTTP3Datagrams().
-		SetHTTP3Grease().
-		SetMultipartBoundaryFunc(webkitMultipartBoundaryFunc)
+		SetHTTP3Grease()
+	c.SetMultipartBoundaryFunc(webkitMultipartBoundaryFunc)
 	return c
 }
 
@@ -359,7 +360,7 @@ var (
 
 func firefoxBrowserProfile(os BrowserOS) *browserHeaderProfile {
 	os = normalizeBrowserOS(os)
-	baseHeaders := cloneMap(firefoxBaseHeaders)
+	baseHeaders := maps.Clone(firefoxBaseHeaders)
 	baseHeaders["user-agent"] = firefoxUserAgentByOS[os]
 	return &browserHeaderProfile{
 		baseHeaders:         baseHeaders,
@@ -382,8 +383,8 @@ func (c *Client) ImpersonateFirefox() *Client {
 func (c *Client) ImpersonateFirefoxWithOS(os BrowserOS) *Client {
 	profile := firefoxBrowserProfile(os)
 	c.setBrowserProfile(profile)
-	c.
-		SetTLSFingerprint(utls.HelloFirefox_120).
+	c.SetTLSFingerprint(utls.HelloFirefox_120)
+	c.Transport.
 		SetHTTP2SettingsFrame(firefoxHttp2Settings...).
 		SetHTTP2ConnectionFlow(12517377).
 		SetHTTP2InitialStreamID(3).
@@ -397,8 +398,8 @@ func (c *Client) ImpersonateFirefoxWithOS(os BrowserOS) *Client {
 			HTTP3SettingH3DatagramDraft:       1,
 		}).
 		EnableHTTP3Datagrams().
-		EnableHTTP3ExtendedConnect().
-		SetMultipartBoundaryFunc(firefoxMultipartBoundaryFunc)
+		EnableHTTP3ExtendedConnect()
+	c.SetMultipartBoundaryFunc(firefoxMultipartBoundaryFunc)
 	return c
 }
 
@@ -463,14 +464,15 @@ func (c *Client) ImpersonateSafari() *Client {
 	c.resetBrowserTransportProfile()
 	c.browserProfile = nil
 	c.clearBrowserProfileHeaders()
-	c.
-		SetTLSFingerprint(utls.HelloSafari_16_0).
+	c.SetTLSFingerprint(utls.HelloSafari_16_0)
+	c.Transport.
 		SetHTTP2SettingsFrame(safariHttp2Settings...).
-		SetHTTP2ConnectionFlow(10485760).
+		SetHTTP2ConnectionFlow(10485760)
+	c.
 		SetCommonPseudoHeaderOder(safariPseudoHeaderOrder...).
 		SetCommonHeaderOrder(safariHeaderOrder...).
 		SetCommonHeaders(safariHeaders).
-		SetHTTP2HeaderPriority(safariHeaderPriority).
 		SetMultipartBoundaryFunc(webkitMultipartBoundaryFunc)
+	c.Transport.SetHTTP2HeaderPriority(safariHeaderPriority)
 	return c
 }

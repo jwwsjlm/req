@@ -86,11 +86,9 @@ client := req.C().
 ## 浏览器 profile + HTTP/3 回退
 
 ```go
-client := req.C().
-	ImpersonateChromeWithOS(req.BrowserOSWindows).
-	EnableHTTP3().
-	EnableHTTP3FallbackOnError().
-	SetHTTP3AltSvcFailureCooldown(30 * time.Second)
+client := req.C().ImpersonateChromeWithOS(req.BrowserOSWindows)
+client.Transport.EnableHTTP3()
+client.Transport.EnableHTTP3FallbackOnError().SetHTTP3AltSvcFailureCooldown(30 * time.Second)
 ```
 
 ## 大文件下载
@@ -143,7 +141,7 @@ client := req.C().SetDNSOverTLSCloudflare()
 
 ```go
 dialer := &net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}
-client.SetDial(func(ctx context.Context, network, address string) (net.Conn, error) {
+client.Transport.SetDial(func(ctx context.Context, network, address string) (net.Conn, error) {
 	return dialer.DialContext(ctx, network, address)
 })
 ```

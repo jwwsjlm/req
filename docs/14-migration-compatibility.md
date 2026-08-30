@@ -14,14 +14,14 @@ github.com/jwwsjlm/req/v3
 
 工具链和语言版本以目标 tag 的 `go.mod` 为准。CI、本机和发布环境应使用受支持版本；升级 Go 后重新执行普通测试、race 测试和 benchmark，因为标准库 HTTP/TLS 行为及性能可能变化。
 
-## 保留的兼容 API
+## 已移除的兼容 API
 
-- `NewClient` 是 `C` 的别名，`NewRequest` 是 `R` 的别名。
-- `SetError` / `SetCommonError` / `Response.Error` 仍存在；新代码优先 `SetErrorResult` / `SetCommonErrorResult` / `ErrorResult`。
-- `Response.Result` 仍存在；新代码优先 `SuccessResult`。
-- `IsSuccess` / `IsError` 仍存在；新代码优先 `IsSuccessState` / `IsErrorState`。
-- 公共伪 Header 方法保留历史拼写 `SetCommonPseudoHeaderOder`。
-- `SetCookieJarFactory` 同时接受 `func() http.CookieJar` 和旧的 `func() *cookiejar.Jar`。
+- 使用 `C`、`T` 和 `Client.R`，不再提供 `NewClient`、`NewTransport`、`NewRequest` 及包级请求包装函数。
+- 使用 `SetSuccessResult`、`SetErrorResult`、`SetCommonErrorResult`、`SuccessResult`、`ErrorResult`、`IsSuccessState` 和 `IsErrorState`。
+- Digest 认证统一通过 `Client.SetCommonDigestAuth` 配置。
+- `SetCookieJarFactory` 只接受 `func() http.CookieJar`。
+- Transport 配置通过 `client.Transport` 完成；相关方法不再额外返回 `*Client`。
+- 公共伪 Header 方法仍保留历史拼写 `SetCommonPseudoHeaderOder`。
 
 ## 行为强化点
 
@@ -47,7 +47,7 @@ multipart 文件默认流式发送。已知 size/content-type 时可以计算 Co
 
 ### TLS 与 HTTP/3
 
-uTLS 自定义只用于 HTTP/1.1/2。HTTP/3 使用 Go `crypto/tls` 和 QUIC 专用配置。旧的 `SetTLSFingerprintSpec` 保留，但多连接 client 应迁移到 `SetTLSFingerprintSpecFactory`，每次返回非 nil 的新 spec；nil factory/spec 现在返回握手错误，不再允许 panic。
+uTLS 自定义只用于 HTTP/1.1/2。HTTP/3 使用 Go `crypto/tls` 和 QUIC 专用配置。自定义指纹使用 `SetTLSFingerprintSpecFactory`，每次返回非 nil 的新 spec；nil factory/spec 会返回握手错误。
 
 uTLS 路径现在保留标准 `tls.Config` 的显式 SNI、mTLS、验证回调执行与错误语义、session cache、renegotiation、key log 和 ECH 客户端配置，并在 `Client.Clone` 后重新绑定 clone 自己的 TLS config。`MinVersion`、`MaxVersion`、`CipherSuites`、`CurvePreferences`、`NextProtos` 会先转换，但浏览器、随机或自定义 spec 会按自身 ClientHello 形状覆盖它们；需要强约束这些字段时应选用满足策略的 spec 或标准 TLS。uTLS v1.8.2 无法补出标准 `ConnectionState` 的 `CurveID`、`HelloRetryRequest` 与私有 keying-material exporter，依赖这些信息的策略应保留标准 TLS 路径。依赖旧版本中“开启指纹后安全/身份配置被忽略”的代码属于不安全偶然行为，应按新语义修正测试。
 

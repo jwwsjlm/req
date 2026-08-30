@@ -29,8 +29,8 @@
 原版 [imroc/req](https://github.com/imroc/req) 已经提供了成熟的链式 HTTP client、HTTP/2/HTTP/3、调试、重试、上传下载、Cookie、middleware 等基础能力。这个 fork 不是重写一套新库，而是在原版基础上继续补强我自己常用的场景：
 
 - **浏览器伪装更完整**：内置固定版本的 Chrome、Firefox、Safari profile，并区分 Windows、macOS、Linux、Android、iOS 的 UA/Header；`ImpersonateChromeWithOS` 这类方法会同时配置常见请求头、TLS 指纹、HTTP/2 顺序和该 profile 明确提供的 HTTP/3 设置，而不是只改一个 Header。
-- **TLS/HTTP 指纹可调得更细**：支持 JA3、fresh uTLS `ClientHelloSpec`、严格导入捕获 ClientHello、可复现随机指纹、Chrome TLS profile、HTTP/2 SETTINGS/header order/pseudo header order/priority/initial stream id，方便在授权环境验证实际指纹。
-- **HTTP/3 控制更偏实战**：补了 HTTP/3 SETTINGS、GREASE、Datagram、Extended CONNECT、QUICConfig、QUIC 性能 profile、Alt-Svc 失败冷却和失败回退；普通抓取建议 `EnableHTTP3().EnableHTTP3FallbackOnError()`，不要一上来强制 H3。
+- **TLS/HTTP 指纹可调得更细**：支持 fresh uTLS `ClientHelloSpec`、严格导入捕获 ClientHello、可复现随机指纹、Chrome TLS profile、HTTP/2 SETTINGS/header order/pseudo header order/priority/initial stream id，方便在授权环境验证实际指纹。
+- **HTTP/3 控制更偏实战**：补了 HTTP/3 SETTINGS、GREASE、Datagram、Extended CONNECT、QUICConfig、QUIC 性能 profile、Alt-Svc 失败冷却和失败回退；相关配置通过 `client.Transport` 完成。
 - **DNS 和 TLS 信息更方便**：支持自定义 resolver、DNS-over-TLS provider，并能从响应读取 TLS 版本、证书信息和 SHA-256 指纹，排查网络和证书问题更省事。
 - **请求构造更适合日常业务**：增加 Any 类型参数、多值 Header、raw path 参数、`SetQueryParamsFromStruct`、带 Content-Type 的 multipart field、显式 `Content-Length`、自定义 CookieJar factory 等补充方法。
 - **资源释放和高并发更稳**：对 dump、trace、retry、multipart 上传、parallel download 做了并发和资源释放加固，重点处理 response body、文件句柄、临时目录、goroutine/channel 退出这些长期运行时容易踩的坑。
@@ -93,7 +93,7 @@
 
 | 场景 | 常用方法 |
 | --- | --- |
-| 创建 client/request | `C()`、`NewClient()`、`DefaultClient()`、`SetDefaultClient()`、`NewTransport()`、`T()`、`R()`、`NewRequest()`、`Clone()` |
+| 创建 client/request | `C()`、`DefaultClient()`、`SetDefaultClient()`、`T()`、`Client.R()`、`Clone()` |
 | HTTP 方法 | `Get()`、`Post()`、`Put()`、`Patch()`、`Delete()`、`Head()`、`Options()`、`Query()`、`Send()`、`Do()`、`MustGet()`、`MustPost()`、`MustPut()`、`MustPatch()`、`MustDelete()`、`MustOptions()`、`MustHead()`、`MustQuery()`、`EnableAllowGetMethodPayload`、`DisableAllowGetMethodPayload` |
 | BaseURL/路径 | `SetBaseURL`、`SetScheme`、`SetURL`、`SetPathParam`、`SetPathParamAny`、`SetPathParams`、`SetPathRawParam`、`SetPathRawParamAny`、`SetPathRawParams` |
 | Query 参数 | `SetQueryParam`、`SetQueryParamAny`、`AddQueryParam`、`AddQueryParams`、`SetQueryParams`、`SetQueryParamsAnyType`、`SetQueryParamsFromValues`、`SetQueryParamsFromStruct`、`SetQueryString` |
@@ -101,21 +101,21 @@
 | 公共 Header | `SetUserAgent`、`SetCommonHeader`、`SetCommonHeaderAny`、`SetCommonHeaderValues`、`SetCommonHeaderMultiValues`、`SetCommonHeaders`、`SetCommonHeaderNonCanonical`、`SetCommonHeadersNonCanonical`、`SetCommonHeaderOrder`、`SetCommonPseudoHeaderOder`、`SetCommonContentType` |
 | 公共 Query/路径 | `SetCommonQueryParam`、`SetCommonQueryParamAny`、`SetCommonQueryParams`、`AddCommonQueryParam`、`AddCommonQueryParams`、`SetCommonQueryParamsFromValues`、`SetCommonQueryParamsFromStruct`、`SetCommonQueryString`、`SetCommonPathParam`、`SetCommonPathParamAny`、`SetCommonPathParams`、`SetCommonPathRawParam`、`SetCommonPathRawParamAny`、`SetCommonPathRawParams` |
 | Cookie | `SetCookies`、`SetCommonCookies`、`SetCookieJarFactory`、`SetCookieJar`、`GetCookies`、`ClearCookies` |
-| 认证 | `SetAuthToken`、`SetBearerAuthToken`、`SetAuthSchemeToken`、`SetBasicAuth`、`SetDigestAuth`、`SetCommonAuthToken`、`SetCommonBearerAuthToken`、`SetCommonAuthSchemeToken`、`SetCommonBasicAuth`、`SetCommonDigestAuth` |
+| 认证 | `SetAuthToken`、`SetBearerAuthToken`、`SetAuthSchemeToken`、`SetBasicAuth`、`SetCommonAuthToken`、`SetCommonBearerAuthToken`、`SetCommonAuthSchemeToken`、`SetCommonBasicAuth`、`SetCommonDigestAuth` |
 | Body/Content-Type | `SetBody`、`SetBodyBytes`、`SetBodyString`、`SetBodyJsonString`、`SetBodyJsonBytes`、`SetBodyJsonMarshal`、`SetBodyXmlString`、`SetBodyXmlBytes`、`SetBodyXmlMarshal`、`SetContentType`、`SetContentLength` |
-| 表单/multipart | `SetFormData`、`SetFormDataAny`、`SetFormDataAnyType`、`SetFormDataFromValues`、`SetOrderedFormData`、`SetCommonFormData`、`SetCommonFormDataAny`、`SetCommonFormDataAnyType`、`SetCommonFormDataFromValues`、`SetMultipartBoundaryFunc`、`SetMultipartField`、`SetFileUpload`、`EnableForceMultipart`、`DisableForceMultipart` |
+| 表单/multipart | `SetFormData`、`SetFormDataAnyType`、`SetFormDataFromValues`、`SetOrderedFormData`、`SetCommonFormData`、`SetCommonFormDataAnyType`、`SetCommonFormDataFromValues`、`SetMultipartBoundaryFunc`、`SetMultipartField`、`SetFileUpload`、`EnableForceMultipart`、`DisableForceMultipart` |
 | 上传 | `SetFile`、`SetFiles`、`SetFileBytes`、`SetFileReader`、`SetUploadCallback`、`SetUploadCallbackWithInterval`、`EnableForceChunkedEncoding`、`DisableForceChunkedEncoding` |
 | 下载 | `SetOutputFile`、`SetOutput`、`SetOutputDirectory`、`SetDownloadCallback`、`SetDownloadCallbackWithInterval`、`NewParallelDownload`、`SetConcurrency`、`SetSegmentSize`、`SetTempRootDir`、`SetFileMode` |
-| 结果解析 | `SetSuccessResult`、`SetErrorResult`、`SetResult`、`SetError`、`SuccessResult`、`ErrorResult`、`Result`、`Error`、`Into`、`Unmarshal`、`UnmarshalJson`、`UnmarshalXml`、`ToString`、`ToBytes` |
-| Response 读取 | `String`、`Bytes`、`Dump`、`GetStatus`、`GetStatusCode`、`GetContentType`、`GetHeader`、`GetHeaderValues`、`HeaderToString`、`IsSuccess`、`IsError`、`TLSInfo`、`TLSGrabber`、`TotalTime`、`ReceivedAt` |
-| 错误处理 | `SetCommonErrorResult`、`SetCommonError`、`SetResultStateCheckFunc`、`OnError`、`OnBeforeRequest`、`OnAfterResponse`、`IsSuccessState`、`IsErrorState`、`ResultState` |
+| 结果解析 | `SetSuccessResult`、`SetErrorResult`、`SuccessResult`、`ErrorResult`、`Into`、`Unmarshal`、`UnmarshalJson`、`UnmarshalXml`、`ToString`、`ToBytes` |
+| Response 读取 | `String`、`Bytes`、`Dump`、`GetStatus`、`GetStatusCode`、`GetContentType`、`GetHeader`、`GetHeaderValues`、`HeaderToString`、`IsSuccessState`、`IsErrorState`、`TLSInfo`、`TotalTime`、`ReceivedAt` |
+| 错误处理 | `SetCommonErrorResult`、`SetResultStateCheckFunc`、`OnError`、`OnBeforeRequest`、`OnAfterResponse`、`IsSuccessState`、`IsErrorState`、`ResultState` |
 | 超时/context/响应限制 | `SetTimeout`、`SetContext`、`Context`、`SetContextData`、`GetContextData`、`SetClient`、`SetMaxResponseSize`、`DisableAutoReadResponse`、`EnableAutoReadResponse`、`EnableCloseConnection` |
 | 重试 | `SetCommonRetryCount`、`SetCommonRetryInterval`、`SetCommonRetryFixedInterval`、`SetCommonRetryBackoffInterval`、`SetCommonRetryCondition`、`AddCommonRetryCondition`、`SetCommonRetryHook`、`AddCommonRetryHook`、`SetRetryCount`、`SetRetryInterval`、`SetRetryFixedInterval`、`SetRetryBackoffInterval`、`SetRetryCondition`、`AddRetryCondition`、`SetRetryHook`、`AddRetryHook`、`GetRetryOption` |
 | 调试 dump | `DevMode`、`SetDebug`、`EnableDebugLog`、`DisableDebugLog`、`EnableDumpAll`、`EnableDumpAllTo`、`EnableDumpAllToFile`、`EnableDumpAllAsync`、`EnableDumpEachRequest`、`EnableDumpEachRequestWithoutBody`、`EnableDump`、`EnableDumpTo`、`EnableDumpToFile`、`DisableDump`、`DisableDumpAll` |
 | Dump 细节 | `SetCommonDumpOptions`、`SetDumpOptions`、`EnableDumpAllWithoutBody`、`EnableDumpAllWithoutHeader`、`EnableDumpAllWithoutRequest`、`EnableDumpAllWithoutRequestBody`、`EnableDumpAllWithoutResponse`、`EnableDumpAllWithoutResponseBody`、`EnableDumpEachRequestWithoutHeader`、`EnableDumpEachRequestWithoutRequest`、`EnableDumpEachRequestWithoutRequestBody`、`EnableDumpEachRequestWithoutResponse`、`EnableDumpEachRequestWithoutResponseBody`、`EnableDumpWithoutBody`、`EnableDumpWithoutHeader`、`EnableDumpWithoutRequest`、`EnableDumpWithoutRequestBody`、`EnableDumpWithoutResponse`、`EnableDumpWithoutResponseBody` |
 | Trace | `EnableTraceAll`、`DisableTraceAll`、`EnableTrace`、`DisableTrace`、`TraceInfo`、`Blame` |
 | 浏览器伪装 | `ImpersonateChrome`、`ImpersonateChromeWithOS`、`ImpersonateChromeRandomOS`、`ImpersonateFirefox`、`ImpersonateFirefoxWithOS`、`ImpersonateFirefoxRandomOS`、`ImpersonateSafari`、`RandomBrowserOS` |
-| TLS 指纹 | `SetTLSFingerprint`、`SetTLSFingerprintJA3`、`SetTLSFingerprintSpec`、`SetTLSFingerprintSpecFactory`、`SetTLSFingerprintRandomizedALPN`、`SetTLSFingerprintRandomizedNoALPN`、两种 `WithSeed`、内置浏览器 preset、`ParseTLSClientHello` |
+| TLS 指纹 | `SetTLSFingerprint`、`SetTLSFingerprintSpecFactory`、`SetTLSFingerprintRandomizedALPN`、`SetTLSFingerprintRandomizedNoALPN`、两种 `WithSeed`、内置浏览器 preset、`ParseTLSClientHello` |
 | TLS/证书 | `SetTLSClientConfig`、`GetTLSClientConfig`、`SetRootCertFromString`、`SetRootCertsFromFile`、`SetCertFromFile`、`SetCerts`、`EnableInsecureSkipVerify`、`DisableInsecureSkipVerify` |
 | DNS | `NewDNSOverTLSResolver`、`SetDNSResolver`、`SetResolver`、`SetHosts`、`SetDNSOverTLS`、`SetDNSOverTLSCloudflare`、`SetDNSOverTLSGoogle`、`SetDNSOverTLSQuad9`、`SetDNSOverTLSAdGuard`、`SetDNSOverTLSAli` |
 | 代理/dial | `SetProxyURL`、`SetProxy`、`SetProxyConnectHeader`、`SetGetProxyConnectHeader`、`SetUnixSocket`、`SetDial`、`SetDialTLS`、`SetTLSHandshake`、`SetTLSHandshakeTimeout` |
@@ -124,8 +124,8 @@
 | HTTP 版本 | `EnableForceHTTP1`、`EnableForceHTTP2`、`EnableForceHTTP3`、`DisableForceHttpVersion`、`EnableH2C`、`DisableH2C`、`EnableHTTP3`、`DisableHTTP3`、`EnableHTTP3FallbackOnError` |
 | HTTP/2 细节 | `SetHTTP2SettingsFrame`、`SetHTTP2ConnectionFlow`、`SetHTTP2InitialStreamID`、`SetHTTP2HeaderPriority`、`SetHTTP2PriorityFrames`、`SetHTTP2MaxHeaderListSize`、`SetHTTP2ReadIdleTimeout`、`SetHTTP2PingTimeout`、`SetHTTP2WriteByteTimeout`、`SetHTTP2StrictMaxConcurrentStreams` |
 | HTTP/3 细节 | `SetHTTP3AdditionalSettings`、`SetHTTP3AdditionalSetting`、`SetHTTP3Grease`、`EnableHTTP3Datagrams`、`DisableHTTP3Datagrams`、`EnableHTTP3ExtendedConnect`、`DisableHTTP3ExtendedConnect`、`SetHTTP3MaxResponseHeaderBytes`、`SetHTTP3QUICConfig`、`SetHTTP3QUICPerformanceProfile`、`SetHTTP3QUICChromeProfile`、`SetHTTP3TLSClientConfig`、`SetHTTP3TLSChromeProfile`、`SetHTTP3TLSFirefoxProfile`、`EnableHTTP3FallbackOnError`、`DisableHTTP3FallbackOnError`、`SetHTTP3AltSvcFailureCooldown` |
-| Transport/性能 | `GetTransport`、`SetMaxIdleConns`、`GetMaxIdleConns`、`SetMaxConnsPerHost`、`SetIdleConnTimeout`、`SetResponseHeaderTimeout`、`SetMaxResponseHeaderBytes`、`SetExpectContinueTimeout`、`SetReadBufferSize`、`SetWriteBufferSize`、`DisableKeepAlives`、`EnableKeepAlives`、`CloseIdleConnections`、`CancelRequest` |
-| 扩展集成 | `GetClient`、`Do(*http.Request)`、`RoundTrip`、`WrapRoundTripFunc`、`WrapRoundTrip`、`NewLogger`、`NewLoggerFromStandardLogger`、`GetLogger`、`SetLogger`、`SetJsonMarshal`、`SetJsonUnmarshal`、`SetXmlMarshal`、`SetXmlUnmarshal` |
+| Transport/性能 | `GetTransport`、`SetMaxIdleConns`、`GetMaxIdleConns`、`SetMaxConnsPerHost`、`SetIdleConnTimeout`、`SetResponseHeaderTimeout`、`SetMaxResponseHeaderBytes`、`SetExpectContinueTimeout`、`SetReadBufferSize`、`SetWriteBufferSize`、`CloseIdleConnections` |
+| 扩展集成 | `GetClient`、`Do(*http.Request)`、`RoundTrip`、`WrapRoundTrip`、`NewLogger`、`NewLoggerFromStandardLogger`、`GetLogger`、`SetLogger`、`SetJsonMarshal`、`SetJsonUnmarshal`、`SetXmlMarshal`、`SetXmlUnmarshal` |
 
 ## 安装
 
@@ -153,19 +153,18 @@ var apiClient = req.C().
 ```go
 var browserClient = req.C().
 	ImpersonateChromeWithOS(req.BrowserOSWindows).
-	SetDNSOverTLSCloudflare().
-	EnableHTTP3().
-	EnableHTTP3FallbackOnError().
-	SetHTTP3AltSvcFailureCooldown(30 * time.Second)
+	SetDNSOverTLSCloudflare()
+
+browserClient.Transport.EnableHTTP3()
+browserClient.Transport.EnableHTTP3FallbackOnError().SetHTTP3AltSvcFailureCooldown(30 * time.Second)
 ```
 
 只想稳定优先，不想强制 HTTP/3：
 
 ```go
-var stableClient = req.C().
-	SetTimeout(20 * time.Second).
-	EnableHTTP3().
-	EnableHTTP3FallbackOnError()
+var stableClient = req.C().SetTimeout(20 * time.Second)
+stableClient.Transport.EnableHTTP3()
+stableClient.Transport.EnableHTTP3FallbackOnError()
 ```
 
 重试优先在明确的只读/幂等 request 上配置。公共 `SetCommonRetry*` 会作用于这个 client 的所有方法；除非 condition 显式检查请求方法，或业务使用幂等键/去重，否则不要让它自动重试 POST/PATCH 等写请求。
@@ -706,8 +705,8 @@ client = req.C().
 自定义代理逻辑：
 
 ```go
-client := req.C().
-	SetProxy(func(r *http.Request) (*url.URL, error) {
+client := req.C()
+client.Transport.SetProxy(func(r *http.Request) (*url.URL, error) {
 		if strings.HasSuffix(r.URL.Hostname(), ".internal") {
 			return nil, nil
 		}
@@ -855,7 +854,7 @@ defer rawResp.Body.Close()
 
 ```go
 client := req.C().
-	WrapRoundTripFunc(func(rt req.RoundTripper) req.RoundTripFunc {
+	WrapRoundTrip(func(rt req.RoundTripper) req.RoundTripFunc {
 		return func(r *req.Request) (*req.Response, error) {
 			start := time.Now()
 			resp, err := rt.RoundTrip(r)
@@ -869,7 +868,7 @@ client := req.C().
 
 ```go
 client.GetTransport().
-	WrapRoundTripFunc(func(rt http.RoundTripper) req.HttpRoundTripFunc {
+	WrapRoundTrip(func(rt http.RoundTripper) req.HttpRoundTripFunc {
 		return func(r *http.Request) (*http.Response, error) {
 			r.Header.Set("X-From", "req")
 			return rt.RoundTrip(r)
@@ -938,17 +937,7 @@ Chrome 固定 uTLS Chrome 133，Firefox 固定 Firefox 120，Safari Header/UA �
 
 应在第一个请求前完成配置。profile 切换会清理未来连接的旧 Header/H2/H3 状态，但不会改写已经建立的连接；切换身份优先使用新 client 或尚未使用的 clone。
 
-## JA3 和自定义 TLS 指纹
-
-JA3：
-
-```go
-ja3 := "771,4865-4866-4867-49195-49199,0-5-10-11-13-16-43-51,29-23-24,0"
-ua := "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:120.0) Gecko/20100101 Firefox/120.0"
-
-client := req.C().
-	SetTLSFingerprintJA3(ja3, ua, false)
-```
+## 自定义 TLS 指纹
 
 自定义 uTLS spec。client 可能建立多条 TLS 连接时，必须让 factory 每次返回一个全新的 spec：
 
@@ -963,7 +952,7 @@ client := req.C().
 	})
 ```
 
-旧的 `SetTLSFingerprintSpec` 仍保留兼容，但 uTLS 的 `ApplyPreset` 会修改传入 spec；同一个 client 连续连接不同域名时应改用 factory，避免重复握手失败。Transport 可并发建连，自定义 factory 也必须自行保护共享状态。
+uTLS 的 `ApplyPreset` 会修改传入 spec，因此 factory 必须为每次握手返回新的 spec。Transport 可并发建连，自定义 factory 也必须自行保护共享状态。
 
 需要同一个 client 的随机结构在新连接间保持稳定时，使用固定 seed：
 
@@ -1020,8 +1009,8 @@ client := req.C().
 完全自定义 TLS config：
 
 ```go
-client := req.C().
-	SetTLSClientConfig(&tls.Config{
+client := req.C()
+client.Transport.SetTLSClientConfig(&tls.Config{
 		MinVersion: tls.VersionTLS12,
 		ServerName: "example.com",
 })
@@ -1034,32 +1023,30 @@ client := req.C().
 自动启用 HTTP/3，并允许 Alt-Svc 探测到的 H3 失败后回退到 H2/H1：
 
 ```go
-client := req.C().
-	EnableHTTP3().
-	EnableHTTP3FallbackOnError().
-	SetHTTP3AltSvcFailureCooldown(30 * time.Second)
+client := req.C()
+client.Transport.EnableHTTP3()
+client.Transport.EnableHTTP3FallbackOnError().SetHTTP3AltSvcFailureCooldown(30 * time.Second)
 ```
 
 强制 HTTP/3：
 
 ```go
-client := req.C().
-	EnableForceHTTP3()
+client := req.C()
+client.Transport.EnableForceHTTP3()
 ```
 
 强制 HTTP/3，同时失败回退：
 
 ```go
-client := req.C().
-	EnableHTTP3FallbackOnError().
-	EnableForceHTTP3()
+client := req.C()
+client.Transport.EnableHTTP3FallbackOnError().EnableForceHTTP3()
 ```
 
 Chrome 风格 HTTP/3：
 
 ```go
-client := req.C().
-	ImpersonateChromeWithOS(req.BrowserOSWindows).
+client := req.C().ImpersonateChromeWithOS(req.BrowserOSWindows)
+client.Transport.
 	SetHTTP3TLSChromeProfile().
 	SetHTTP3QUICChromeProfile().
 	EnableHTTP3FallbackOnError().
@@ -1069,7 +1056,8 @@ client := req.C().
 ## HTTP/3 高级控制
 
 ```go
-client := req.C().
+client := req.C()
+client.Transport.
 	SetHTTP3TLSChromeProfile().
 	SetHTTP3QUICChromeProfile().
 	SetHTTP3AdditionalSetting(req.HTTP3SettingQpackMaxTableCapacity, 65536).
@@ -1086,8 +1074,8 @@ client := req.C().
 自定义 HTTP/3 TLS：
 
 ```go
-client := req.C().
-	SetHTTP3TLSClientConfig(&tls.Config{
+client := req.C()
+client.Transport.SetHTTP3TLSClientConfig(&tls.Config{
 		MinVersion: tls.VersionTLS13,
 		MaxVersion: tls.VersionTLS13,
 		NextProtos: []string{"h3"},
@@ -1097,8 +1085,8 @@ client := req.C().
 自定义 QUIC：
 
 ```go
-client := req.C().
-	SetHTTP3QUICConfig(&quic.Config{
+client := req.C()
+client.Transport.SetHTTP3QUICConfig(&quic.Config{
 		HandshakeIdleTimeout: 5 * time.Second,
 		MaxIdleTimeout:       45 * time.Second,
 		KeepAlivePeriod:      15 * time.Second,
@@ -1109,16 +1097,16 @@ client := req.C().
 使用内置性能配置：
 
 ```go
-client := req.C().
-	SetHTTP3QUICPerformanceProfile().
-	EnableHTTP3()
+client := req.C()
+client.Transport.SetHTTP3QUICPerformanceProfile()
+client.Transport.EnableHTTP3()
 ```
 
 ## HTTP/2 高级控制
 
 ```go
-client := req.C().
-	SetHTTP2SettingsFrame(
+client := req.C()
+client.Transport.SetHTTP2SettingsFrame(
 		http2.Setting{
 			ID:  http2.SettingHeaderTableSize,
 			Val: 65536,
@@ -1137,22 +1125,22 @@ client := req.C().
 强制 HTTP/1.1：
 
 ```go
-client := req.C().
-	EnableForceHTTP1()
+client := req.C()
+client.Transport.EnableForceHTTP1()
 ```
 
 强制 HTTP/2：
 
 ```go
-client := req.C().
-	EnableForceHTTP2()
+client := req.C()
+client.Transport.EnableForceHTTP2()
 ```
 
 H2C，也就是明文 HTTP/2：
 
 ```go
-client := req.C().
-	EnableH2C()
+client := req.C()
+client.Transport.EnableH2C()
 ```
 
 Unix Socket：
@@ -1165,8 +1153,8 @@ client := req.C().
 自定义 dial：
 
 ```go
-client := req.C().
-	SetDial(func(ctx context.Context, network, addr string) (net.Conn, error) {
+client := req.C()
+client.Transport.SetDial(func(ctx context.Context, network, addr string) (net.Conn, error) {
 		var d net.Dialer
 		return d.DialContext(ctx, network, addr)
 	})
@@ -1177,36 +1165,36 @@ client := req.C().
 自动解压 gzip/deflate/br/zstd：
 
 ```go
-client := req.C().
-	EnableAutoDecompress()
+client := req.C()
+client.Transport.AutoDecompression = true
 ```
 
 禁用自动解压：
 
 ```go
-client := req.C().
-	DisableAutoDecompress()
+client := req.C()
+client.Transport.AutoDecompression = false
 ```
 
 自动把非 UTF-8 文本转成 UTF-8 默认开启；如果想自己处理：
 
 ```go
-client := req.C().
-	DisableAutoDecode()
+client := req.C()
+client.Transport.DisableAutoDecode()
 ```
 
 只对指定 Content-Type 自动转码：
 
 ```go
-client := req.C().
-	SetAutoDecodeContentType("text", "html")
+client := req.C()
+client.Transport.SetAutoDecodeContentType("text", "html")
 ```
 
 自己决定哪些响应需要转码：
 
 ```go
-client := req.C().
-	SetAutoDecodeContentTypeFunc(func(contentType string) bool {
+client := req.C()
+client.Transport.SetAutoDecodeContentTypeFunc(func(contentType string) bool {
 		return strings.Contains(contentType, "text/") ||
 			strings.Contains(contentType, "json")
 	})
@@ -1309,16 +1297,6 @@ client.ClearCookies()
 ```go
 client := req.C().
 	SetCookieJarFactory(func() http.CookieJar {
-		jar, _ := cookiejar.New(nil)
-		return jar
-	})
-```
-
-也兼容旧写法：
-
-```go
-client := req.C().
-	SetCookieJarFactory(func() *cookiejar.Jar {
 		jar, _ := cookiejar.New(nil)
 		return jar
 	})
@@ -1478,13 +1456,13 @@ if err != nil {
 
 ```go
 func NewHTTPClient() *req.Client {
-	return req.C().
+	client := req.C().
 		SetTimeout(30 * time.Second).
 		ImpersonateChromeWithOS(req.BrowserOSWindows).
-		SetDNSOverTLSCloudflare().
-		EnableHTTP3().
-		EnableHTTP3FallbackOnError().
-		SetHTTP3AltSvcFailureCooldown(30 * time.Second)
+		SetDNSOverTLSCloudflare()
+	client.Transport.EnableHTTP3()
+	client.Transport.EnableHTTP3FallbackOnError().SetHTTP3AltSvcFailureCooldown(30 * time.Second)
+	return client
 }
 ```
 
@@ -1561,19 +1539,17 @@ HTTP 指纹不是只改 `User-Agent`。真实浏览器访问时，服务端通�
 ```go
 client := req.C().
 	ImpersonateChromeWithOS(req.BrowserOSWindows).
-	SetDNSOverTLSCloudflare().
-	EnableHTTP3().
-	EnableHTTP3FallbackOnError().
-	SetHTTP3AltSvcFailureCooldown(30 * time.Second)
+	SetDNSOverTLSCloudflare()
+client.Transport.EnableHTTP3()
+client.Transport.EnableHTTP3FallbackOnError().SetHTTP3AltSvcFailureCooldown(30 * time.Second)
 ```
 
 Firefox：
 
 ```go
-client := req.C().
-	ImpersonateFirefoxWithOS(req.BrowserOSWindows).
-	EnableHTTP3().
-	EnableHTTP3FallbackOnError()
+client := req.C().ImpersonateFirefoxWithOS(req.BrowserOSWindows)
+client.Transport.EnableHTTP3()
+client.Transport.EnableHTTP3FallbackOnError()
 ```
 
 随机系统 profile：
@@ -1587,14 +1563,15 @@ client := req.C().
 
 ```go
 func NewBrowserSession() *req.Client {
-	return req.C().
+	client := req.C().
 		SetCookieJarFactory(func() http.CookieJar {
 			jar, _ := cookiejar.New(nil)
 			return jar
 		}).
-		ImpersonateChromeWithOS(req.BrowserOSWindows).
-		EnableHTTP3().
-		EnableHTTP3FallbackOnError()
+		ImpersonateChromeWithOS(req.BrowserOSWindows)
+	client.Transport.EnableHTTP3()
+	client.Transport.EnableHTTP3FallbackOnError()
+	return client
 }
 ```
 
@@ -1622,8 +1599,8 @@ client := req.C().
 		"accept-encoding",
 		"accept-language",
 	).
-	SetCommonPseudoHeaderOder(":method", ":authority", ":scheme", ":path").
-	SetHTTP2ConnectionFlow(15663105)
+	SetCommonPseudoHeaderOder(":method", ":authority", ":scheme", ":path")
+client.Transport.SetHTTP2ConnectionFlow(15663105)
 ```
 
 更推荐直接用 `ImpersonateChromeWithOS`，因为它会把 TLS、HTTP/2、HTTP/3、header、multipart boundary 一起配置好。

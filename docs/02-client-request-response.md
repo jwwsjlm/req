@@ -58,9 +58,9 @@ tenantB := base.Clone().SetCommonBearerAuthToken("token-b")
 
 ## DefaultClient
 
-包级 `req.Get`、`req.Post` 等使用全局默认 client。小脚本可以使用，服务端程序建议显式持有 client，避免全局配置和测试相互影响。
+`DefaultClient()` 返回全局默认 client。服务端程序建议显式持有 client，避免全局配置和测试相互影响。
 
 ```go
 req.SetDefaultClient(req.C().SetTimeout(10 * time.Second))
-resp, err := req.Get("https://example.com")
+resp, err := req.DefaultClient().R().Get("https://example.com")
 ```

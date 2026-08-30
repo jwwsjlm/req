@@ -187,13 +187,18 @@ func tlsCompatOKHandler(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte("ok"))
 }
 
+func configuredTLSClient(config *tls.Config) *Client {
+	client := C()
+	client.Transport.SetProxy(nil)
+	client.Transport.SetTLSClientConfig(config)
+	return client
+}
+
 func tlsCompatClient(rootCAs *x509.CertPool) *Client {
-	return C().
-		SetProxy(nil).
-		SetTLSClientConfig(&tls.Config{
-			RootCAs:    rootCAs,
-			NextProtos: []string{"http/1.1"},
-		}).
+	return configuredTLSClient(&tls.Config{
+		RootCAs:    rootCAs,
+		NextProtos: []string{"http/1.1"},
+	}).
 		SetTLSFingerprint(utls.HelloChrome_133)
 }
 
@@ -228,7 +233,7 @@ func TestUTLSVerifyConnectionAndExplicitServerName(t *testing.T) {
 	defer server.Close()
 
 	var callbackCount atomic.Int32
-	client := C().SetProxy(nil).SetTLSClientConfig(&tls.Config{
+	client := configuredTLSClient(&tls.Config{
 		RootCAs:    ca.pool,
 		ServerName: "verify.test",
 		NextProtos: []string{"http/1.1"},
@@ -263,7 +268,7 @@ func TestUTLSVerifyPeerCertificate(t *testing.T) {
 	defer server.Close()
 
 	var callbackCount atomic.Int32
-	client := C().SetProxy(nil).SetTLSClientConfig(&tls.Config{
+	client := configuredTLSClient(&tls.Config{
 		RootCAs:    ca.pool,
 		ServerName: "peer-check.test",
 		NextProtos: []string{"http/1.1"},
@@ -346,7 +351,7 @@ func TestUTLSDynamicGetClientCertificate(t *testing.T) {
 	defer server.Close()
 
 	var callbackCount atomic.Int32
-	client := C().SetProxy(nil).SetTLSClientConfig(&tls.Config{
+	client := configuredTLSClient(&tls.Config{
 		RootCAs:    serverCA.pool,
 		NextProtos: []string{"http/1.1"},
 		GetClientCertificate: func(info *tls.CertificateRequestInfo) (*tls.Certificate, error) {
@@ -404,16 +409,13 @@ func TestUTLSTLS13ClientSessionCacheResumption(t *testing.T) {
 	defer server.Close()
 
 	cache := newTLSCompatSessionCache()
-	client := C().
-		SetProxy(nil).
-		DisableKeepAlives().
-		SetTLSClientConfig(&tls.Config{
-			RootCAs:            ca.pool,
-			NextProtos:         []string{"http/1.1"},
-			MinVersion:         tls.VersionTLS13,
-			MaxVersion:         tls.VersionTLS13,
-			ClientSessionCache: cache,
-		}).
+	client := configuredTLSClient(&tls.Config{
+		RootCAs:            ca.pool,
+		NextProtos:         []string{"http/1.1"},
+		MinVersion:         tls.VersionTLS13,
+		MaxVersion:         tls.VersionTLS13,
+		ClientSessionCache: cache,
+	}).
 		// Browser parrot presets without a real PSK extension intentionally skip
 		// resumption. HelloGolang keeps the request on req's uTLS handshake path
 		// while exercising uTLS's fully supported TLS 1.3 PSK implementation.
@@ -421,6 +423,7 @@ func TestUTLSTLS13ClientSessionCacheResumption(t *testing.T) {
 		// 不带真实 PSK 扩展的浏览器 preset 会有意跳过恢复。HelloGolang 仍
 		// 经过 req 的 uTLS 握手路径，同时使用 uTLS 完整支持的 TLS 1.3 PSK。
 		SetTLSFingerprint(utls.HelloGolang)
+	client.Transport.DisableKeepAlives = true
 
 	doTLSCompatGet(t, client, server.url)
 	first := <-observations
@@ -484,7 +487,7 @@ func TestUTLSCloneUsesIndependentTLSConfig(t *testing.T) {
 
 	base := tlsCompatClient(caA.pool)
 	clone := base.Clone()
-	clone.SetTLSClientConfig(&tls.Config{RootCAs: caB.pool, NextProtos: []string{"http/1.1"}})
+	clone.Transport.SetTLSClientConfig(&tls.Config{RootCAs: caB.pool, NextProtos: []string{"http/1.1"}})
 	doTLSCompatGet(t, base, serverA.url)
 	doTLSCompatGet(t, clone, serverB.url)
 }
@@ -509,7 +512,7 @@ func TestUTLSNilClientHelloSpecFactoryReturnsError(t *testing.T) {
 	}
 	defer server.Close()
 
-	client := C().SetProxy(nil).SetTLSClientConfig(&tls.Config{
+	client := configuredTLSClient(&tls.Config{
 		InsecureSkipVerify: true, // test server uses a deliberately untrusted in-memory CA.
 		NextProtos:         []string{"http/1.1"},
 	}).SetTLSFingerprintSpecFactory(func() *utls.ClientHelloSpec {

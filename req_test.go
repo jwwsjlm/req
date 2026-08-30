@@ -435,7 +435,9 @@ func TestIntoReturnsErrorStateStatus(t *testing.T) {
 }
 
 func TestTrailer(t *testing.T) {
-	resp, err := tc().EnableForceHTTP1().R().Get("/chunked")
+	c := tc()
+	c.Transport.EnableForceHTTP1()
+	resp, err := c.R().Get("/chunked")
 	assertSuccess(t, resp, err)
 	_, ok := resp.Trailer["Expires"]
 	if !ok {
@@ -445,5 +447,7 @@ func TestTrailer(t *testing.T) {
 
 func testWithAllTransport(t *testing.T, testFunc func(t *testing.T, c *Client)) {
 	testFunc(t, tc())
-	testFunc(t, tc().EnableForceHTTP1())
+	c := tc()
+	c.Transport.EnableForceHTTP1()
+	testFunc(t, c)
 }

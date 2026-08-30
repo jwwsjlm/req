@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -43,7 +44,7 @@ type Request struct {
 	Body            []byte
 	GetBody         GetContentFunc
 	// URL is an auto-generated field, and is nil in request middleware (OnBeforeRequest),
-	// consider using RawURL if you want, it's not nil in client middleware (WrapRoundTripFunc)
+	// consider using RawURL if you want, it's not nil in client middleware (WrapRoundTrip)
 	URL *urlpkg.URL
 
 	isMultiPart              bool
@@ -252,13 +253,6 @@ func (r *Request) SetFormDataAnyType(data map[string]any) *Request {
 		r.FormData.Set(k, fmt.Sprint(v))
 	}
 	return r
-}
-
-// SetFormDataAny is an alias of SetFormDataAnyType.
-//
-// SetFormDataAny 是 SetFormDataAnyType 的别名，用于设置可包含任意类型值的表单数据。
-func (r *Request) SetFormDataAny(data map[string]any) *Request {
-	return r.SetFormDataAnyType(data)
 }
 
 // SetCookies set http cookies for the request.
@@ -516,17 +510,6 @@ func (r *Request) SetDownloadCallbackWithInterval(callback DownloadCallback, min
 	return r
 }
 
-// SetResult set the result that response Body will be unmarshalled to if
-// no error occurs and Response.ResultState() returns SuccessState, by default
-// it requires HTTP status `code >= 200 && code <= 299`, you can also use
-// Client.SetResultStateCheckFunc to customize the result state check logic.
-//
-// SetResult 为成功状态的响应体设置反序列化目标；它是 SetSuccessResult 的已弃用别名。
-// Deprecated: Use SetSuccessResult instead.
-func (r *Request) SetResult(result any) *Request {
-	return r.SetSuccessResult(result)
-}
-
 // SetSuccessResult set the result that response Body will be unmarshalled to if
 // no error occurs and Response.ResultState() returns SuccessState, by default
 // it requires HTTP status `code >= 200 && code <= 299`, you can also use
@@ -540,17 +523,6 @@ func (r *Request) SetSuccessResult(result any) *Request {
 	}
 	r.Result = util.GetPointer(result)
 	return r
-}
-
-// SetError set the result that response body will be unmarshalled to if
-// no error occurs and Response.ResultState() returns ErrorState, by default
-// it requires HTTP status `code >= 400`, you can also use
-// Client.SetResultStateCheckFunc to customize the result state check logic.
-//
-// SetError 为错误状态的响应体设置反序列化目标；它是 SetErrorResult 的已弃用别名。
-// Deprecated: Use SetErrorResult result.
-func (r *Request) SetError(err any) *Request {
-	return r.SetErrorResult(err)
 }
 
 // SetErrorResult set the result that response body will be unmarshalled to if
@@ -608,25 +580,6 @@ func (r *Request) SetBasicAuth(username, password string) *Request {
 	return r.SetHeader(header.Authorization, util.BasicAuthHeaderValue(username, password))
 }
 
-// SetDigestAuth sets the Digest Access auth scheme for the HTTP request. If a server responds with 401 and sends a
-// Digest challenge in the WWW-Authenticate Header, the request will be resent with the appropriate Authorization Header.
-//
-// For Example: To set the Digest scheme with username "roc" and password "123456"
-//
-//	client.R().SetDigestAuth("roc", "123456")
-//
-// Information about Digest Access Authentication can be found in RFC7616:
-//
-//	https://datatracker.ietf.org/doc/html/rfc7616
-//
-// SetDigestAuth 为当前请求注册 Digest 认证处理：收到 401 Digest challenge 后携带计算出的
-// Authorization 头重新发送请求。
-// Deprecated: Use Client.SetCommonDigestAuth instead. Request level digest auth is not recommended,
-func (r *Request) SetDigestAuth(username, password string) *Request {
-	r.OnAfterResponse(handleDigestAuthFunc(username, password))
-	return r
-}
-
 // OnAfterResponse adds response middleware that runs after each request attempt,
 // including attempts that finish with an error.
 //
@@ -673,7 +626,7 @@ func (r *Request) SetHeaderValues(key string, values ...string) *Request {
 	if r.Headers == nil {
 		r.Headers = make(http.Header)
 	}
-	r.Headers[http.CanonicalHeaderKey(key)] = cloneSlice(values)
+	r.Headers[http.CanonicalHeaderKey(key)] = slices.Clone(values)
 	return r
 }
 

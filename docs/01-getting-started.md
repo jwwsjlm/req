@@ -37,7 +37,7 @@ if !resp.IsSuccessState() {
 fmt.Println(resp.String())
 ```
 
-`C()`/`NewClient()` 创建 client，`R()`/`NewRequest()` 创建单次请求，`Get`、`Post` 等方法发送请求。
+`C()`/`C()` 创建 client，`R()`/`R()` 创建单次请求，`Get`、`Post` 等方法发送请求。
 
 ## 自动解析 JSON
 

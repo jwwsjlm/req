@@ -33,7 +33,8 @@ func TestSocks4ProxyE2E(t *testing.T) {
 	stop := startSocks4Proxy(t, proxyLn, nil)
 
 	proxyURL := "socks4://userid@" + proxyLn.Addr().String()
-	client := C().SetProxyURL(proxyURL).DisableKeepAlives()
+	client := C().SetProxyURL(proxyURL)
+	client.Transport.DisableKeepAlives = true
 
 	resp, err := client.R().Get(backend.URL)
 	if err != nil {
@@ -87,7 +88,8 @@ func TestSocks4aProxyE2E(t *testing.T) {
 
 	// Request a non-resolvable domain name so the client must use SOCKS4a
 	// remote DNS rather than an IPv4 literal path.
-	client := C().SetProxyURL("socks4a://" + proxyLn.Addr().String()).DisableKeepAlives()
+	client := C().SetProxyURL("socks4a://" + proxyLn.Addr().String())
+	client.Transport.DisableKeepAlives = true
 	url := "http://" + net.JoinHostPort(fakeDomain, backendPort) + "/"
 	resp, err := client.R().Get(url)
 	if err != nil {

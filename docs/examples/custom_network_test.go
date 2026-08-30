@@ -18,9 +18,11 @@ func newCustomNetworkClient() *req.Client {
 		Timeout:   5 * time.Second,
 		KeepAlive: 30 * time.Second,
 	}
-	return req.C().SetDial(func(ctx context.Context, network, address string) (net.Conn, error) {
+	client := req.C()
+	client.Transport.SetDial(func(ctx context.Context, network, address string) (net.Conn, error) {
 		return dialer.DialContext(ctx, network, address)
 	})
+	return client
 }
 
 func Example_customNetwork() {

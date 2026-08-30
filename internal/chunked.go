@@ -13,7 +13,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/jwwsjlm/req/v3/internal/util"
 	"io"
 )
 
@@ -171,7 +170,7 @@ var semi = []byte(";")
 //	"0;token=val" => "0"
 //	`0;token="quoted string"` => "0"
 func removeChunkExtension(p []byte) ([]byte, error) {
-	p, _, _ = util.CutBytes(p, semi)
+	p, _, _ = bytes.Cut(p, semi)
 	// TODO: care about exact syntax of chunk extensions? We're
 	// ignoring and stripping them anyway. For now just never
 	// return an error.

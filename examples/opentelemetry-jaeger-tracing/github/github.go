@@ -92,7 +92,7 @@ const apiNameKey apiNameType = iota
 
 // SetTracer set the tracer of opentelemetry.
 func (c *Client) SetTracer(tracer trace.Tracer) {
-	c.WrapRoundTripFunc(func(rt req.RoundTripper) req.RoundTripFunc {
+	c.WrapRoundTrip(func(rt req.RoundTripper) req.RoundTripFunc {
 		return func(req *req.Request) (resp *req.Response, err error) {
 			ctx := req.Context()
 			apiName, ok := ctx.Value(apiNameKey).(string)

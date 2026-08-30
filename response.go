@@ -108,17 +108,6 @@ type Response struct {
 	result     any
 }
 
-// IsSuccess method returns true if no error occurs and HTTP status `code >= 200 and <= 299`
-// by default, you can also use Client.SetResultStateCheckFunc to customize the result
-// state check logic.
-// IsSuccess 默认在未发生错误且 HTTP 状态码为 2xx 时返回 true；可通过
-// Client.SetResultStateCheckFunc 自定义，该方法已弃用。
-//
-// Deprecated: Use IsSuccessState instead.
-func (r *Response) IsSuccess() bool {
-	return r.IsSuccessState()
-}
-
 // IsSuccessState method returns true if no error occurs and HTTP status `code >= 200 and <= 299`
 // by default, you can also use Client.SetResultStateCheckFunc to customize the result state
 // check logic.
@@ -129,17 +118,6 @@ func (r *Response) IsSuccessState() bool {
 		return false
 	}
 	return r.ResultState() == SuccessState
-}
-
-// IsError method returns true if no error occurs and HTTP status `code >= 400`
-// by default, you can also use Client.SetResultStateCheckFunc to customize the result
-// state check logic.
-// IsError 默认在未发生错误且 HTTP 状态码不小于 400 时返回 true；可通过
-// Client.SetResultStateCheckFunc 自定义，该方法已弃用。
-//
-// Deprecated: Use IsErrorState instead.
-func (r *Response) IsError() bool {
-	return r.IsErrorState()
 }
 
 // IsErrorState method returns true if no error occurs and HTTP status `code >= 400`
@@ -183,16 +161,6 @@ func (r *Response) ResultState() ResultState {
 	return resultStateCheckFunc(r)
 }
 
-// Result returns the automatically unmarshalled object if Request.SetSuccessResult
-// is called and ResultState returns SuccessState.
-// Otherwise, return nil.
-// Result 返回由 Request.SetSuccessResult 自动反序列化的成功结果；该方法已弃用。
-//
-// Deprecated: Use SuccessResult instead.
-func (r *Response) Result() any {
-	return r.SuccessResult()
-}
-
 // SuccessResult returns the automatically unmarshalled object if Request.SetSuccessResult
 // is called and ResultState returns SuccessState.
 // Otherwise, return nil.
@@ -200,17 +168,6 @@ func (r *Response) Result() any {
 // 未配置结果或状态不是 SuccessState 时返回 nil。
 func (r *Response) SuccessResult() any {
 	return r.result
-}
-
-// Error returns the automatically unmarshalled object when Request.SetErrorResult
-// or Client.SetCommonErrorResult is called, and ResultState returns ErrorState.
-// Otherwise, return nil.
-// Error 返回由 Request.SetErrorResult 或 Client.SetCommonErrorResult 自动反序列化的
-// 错误结果；该方法已弃用。
-//
-// Deprecated: Use ErrorResult instead.
-func (r *Response) Error() any {
-	return r.error
 }
 
 // ErrorResult returns the automatically unmarshalled object when Request.SetErrorResult
@@ -325,6 +282,7 @@ func (r *Response) SetBodyString(body string) {
 //  1. Request.SetSuccessResult or Request.SetErrorResult is called.
 //  2. `Client.DisableAutoReadResponse` and `Request.DisableAutoReadResponse` is not
 //     called, and also `Request.SetOutput` and `Request.SetOutputFile` is not called.
+//
 // Bytes 返回已缓存的响应体且不会主动读取底层 body；尚未读取时可能为 nil。
 func (r *Response) Bytes() []byte {
 	return r.body
@@ -335,6 +293,7 @@ func (r *Response) Bytes() []byte {
 //  1. Request.SetSuccessResult or Request.SetErrorResult is called.
 //  2. `Client.DisableAutoReadResponse` and `Request.DisableAutoReadResponse` is not
 //     called, and also `Request.SetOutput` and `Request.SetOutputFile` is not called.
+//
 // String 以字符串返回已缓存的响应体且不会主动读取底层 body；未读取或为空时返回空字符串。
 func (r *Response) String() string {
 	return string(r.body)

@@ -126,7 +126,7 @@ req 最重要的调用关系只有三层：
 
 | 对象 | 创建方式 | 生命周期 | 应该放什么 |
 | --- | --- | --- | --- |
-| `*req.Client` | `req.C()` 或 `req.NewClient()` | 长期复用 | BaseURL、总超时、公共 Header、Cookie、代理、连接池配置 |
+| `*req.Client` | `req.C()` 或 `req.C()` | 长期复用 | BaseURL、总超时、公共 Header、Cookie、代理、连接池配置 |
 | `*req.Request` | `client.R()` | 一次请求 | 本次 Query、Path、Header、Body、Context、结果类型 |
 | `*req.Response` | `Get`、`Post` 等返回 | 一次响应 | 状态码、Header、响应体、解析结果、耗时和 TLS 信息 |
 
@@ -434,10 +434,9 @@ resp, err := client.R().
 例如，在确有浏览器兼容需求的授权场景中，可以使用一致的 Chrome profile：
 
 ```go
-client := req.C().
-	ImpersonateChromeWithOS(req.BrowserOSWindows).
-	EnableHTTP3().
-	EnableHTTP3FallbackOnError()
+client := req.C().ImpersonateChromeWithOS(req.BrowserOSWindows)
+client.Transport.EnableHTTP3()
+client.Transport.EnableHTTP3FallbackOnError()
 ```
 
 这不只是修改 `User-Agent`，还会配置对应的 Header、TLS 和协议行为。它也不等于能够绕过所有站点策略；账号、Cookie、IP、访问频率和页面脚本仍是不同层面的问题。
