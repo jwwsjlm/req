@@ -5,11 +5,9 @@
 package http2
 
 import (
-	"bufio"
 	"crypto/tls"
 	"os"
 	"strings"
-	"sync"
 
 	"golang.org/x/net/http/httpguts"
 )
@@ -18,7 +16,6 @@ var (
 	VerboseLogs    bool
 	logFrameWrites bool
 	logFrameReads  bool
-	inTests        bool
 )
 
 func init() {
@@ -74,22 +71,9 @@ func validWireHeaderFieldName(v string) bool {
 	return true
 }
 
-// bufWriterPoolBufferSize is the size of bufio.Writer's
-// buffers created using bufWriterPool.
-//
-// TODO: pick a less arbitrary value? this is a bit under
-// (3 x typical 1500 byte MTU) at least. Other than that,
-// not much thought went into it.
-const bufWriterPoolBufferSize = 4 << 10
-
-var bufWriterPool = sync.Pool{
-	New: func() any {
-		return bufio.NewWriterSize(nil, bufWriterPoolBufferSize)
-	},
-}
-
+// mustUint31 保留负数检查；int32 本身已保证值不会超过 31 位正数上限。
 func mustUint31(v int32) uint32 {
-	if v < 0 || v > 2147483647 {
+	if v < 0 {
 		panic("out of range")
 	}
 	return uint32(v)

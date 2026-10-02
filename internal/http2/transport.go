@@ -33,7 +33,6 @@ import (
 
 	"golang.org/x/net/http/httpguts"
 	"golang.org/x/net/http2/hpack"
-	"golang.org/x/net/idna"
 
 	"github.com/jwwsjlm/req/v3/http2"
 	"github.com/jwwsjlm/req/v3/internal/ascii"
@@ -439,30 +438,6 @@ func (t *Transport) RoundTripOnlyCachedConn(req *http.Request) (*http.Response, 
 	return t.RoundTripOpt(req, RoundTripOpt{OnlyCachedConn: true})
 }
 
-// authorityAddr returns a given authority (a host/IP, or host:port / ip:port)
-// and returns a host:port. The port 443 is added if needed.
-func authorityAddr(scheme string, authority string) (addr string) {
-	host, port, err := net.SplitHostPort(authority)
-	if err != nil { // authority didn't have a port
-		host = authority
-		port = ""
-	}
-	if port == "" { // authority's port was empty
-		port = "443"
-		if scheme == "http" {
-			port = "80"
-		}
-	}
-	if a, err := idna.ToASCII(host); err == nil {
-		host = a
-	}
-	// IPv6 address literal, without a port:
-	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
-		return host + ":" + port
-	}
-	return net.JoinHostPort(host, port)
-}
-
 func (t *Transport) AddConn(conn net.Conn, addr string) (used bool, err error) {
 	used, err = t.connPool().AddConnIfNeeded(addr, t, conn)
 	return
@@ -806,6 +781,7 @@ func (t *Transport) dialTLS(ctx context.Context) func(string, string, *tls.Confi
 		if p := state.NegotiatedProtocol; p != NextProtoTLS {
 			return nil, fmt.Errorf("http2: unexpected ALPN protocol %q; want %q", p, NextProtoTLS)
 		}
+		//lint:ignore SA1019 Preserve the legacy ALPN contract for custom TLS connections.
 		if !state.NegotiatedProtocolIsMutual {
 			return nil, errors.New("http2: could not negotiate protocol mutually")
 		}
@@ -1043,12 +1019,6 @@ type clientConnIdleState struct {
 	canTakeNewRequest bool
 }
 
-func (cc *ClientConn) idleState() clientConnIdleState {
-	cc.mu.Lock()
-	defer cc.mu.Unlock()
-	return cc.idleStateLocked()
-}
-
 func (cc *ClientConn) idleStateLocked() (st clientConnIdleState) {
 	if cc.singleUse && cc.nextStreamID > 1 {
 		return
@@ -1129,12 +1099,6 @@ func (cc *ClientConn) closeIfIdle() {
 		cc.vlogf("http2: Transport closing idle conn %p (forSingleUse=%v, maxStream=%v)", cc, cc.singleUse, nextID-2)
 	}
 	cc.closeConn()
-}
-
-func (cc *ClientConn) isDoNotReuseAndIdle() bool {
-	cc.mu.Lock()
-	defer cc.mu.Unlock()
-	return cc.doNotReuse && len(cc.streams) == 0
 }
 
 var shutdownEnterWaitStateHook = func() {}
@@ -1304,9 +1268,10 @@ func (cc *ClientConn) roundTrip(req *http.Request, streamf func(*clientStream)) 
 	}
 	ctx := req.Context()
 	cs := &clientStream{
-		currentRequest:       req,
-		cc:                   cc,
-		ctx:                  ctx,
+		currentRequest: req,
+		cc:             cc,
+		ctx:            ctx,
+		//lint:ignore SA1019 Preserve net/http Request.Cancel compatibility; new callers should use Context.
 		reqCancel:            req.Cancel,
 		isHead:               req.Method == "HEAD",
 		reqBody:              req.Body,
@@ -1756,9 +1721,6 @@ func (cc *ClientConn) writeHeaders(streamID uint32, endStream bool, maxFrameSize
 var (
 	// abort request body write; don't send cancel
 	errStopReqBodyWrite = errors.New("http2: aborting request body write")
-
-	// abort request body write, but send stream reset of cancel.
-	errStopReqBodyWriteAndCancel = errors.New("http2: canceling request")
 
 	errReqBodyTooLong = errors.New("http2: request body larger than specified content length")
 )
@@ -2312,12 +2274,6 @@ func (cc *ClientConn) writeHeader(name, value string) {
 		log.Printf("http2: Transport encoding header %q = %q", name, value)
 	}
 	cc.henc.WriteField(hpack.HeaderField{Name: name, Value: value})
-}
-
-type resAndError struct {
-	_   incomparable
-	res *http.Response
-	err error
 }
 
 // requires cc.mu be held.
@@ -3308,30 +3264,8 @@ func strSliceContains(ss []string, s string) bool {
 	return false
 }
 
-type erringRoundTripper struct{ err error }
-
-func (rt erringRoundTripper) RoundTripErr() error { return rt.err }
-
-func (rt erringRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
-	return nil, rt.err
-}
-
 // isConnectionCloseRequest reports whether req should use its own
 // connection for a single request and then close the connection.
 func isConnectionCloseRequest(req *http.Request) bool {
 	return req.Close || httpguts.HeaderValuesContainsToken(req.Header["Connection"], "close")
-}
-
-// noDialH2RoundTripper is a RoundTripper which only tries to complete the request
-// if there's already has a cached connection to the host.
-// (The field is exported so it can be accessed via reflect from net/http; tested
-// by TestNoDialH2RoundTripperType)
-type noDialH2RoundTripper struct{ *Transport }
-
-func (rt noDialH2RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	res, err := rt.Transport.RoundTrip(req)
-	if IsNoCachedConnError(err) {
-		return nil, http.ErrSkipAltProtocol
-	}
-	return res, err
 }

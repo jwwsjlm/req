@@ -65,12 +65,10 @@ type Request struct {
 	maxResponseSize    *int64
 	unReplayableBody   io.ReadCloser
 	retryOption        *RetryOption
-	bodyReadCloser     io.ReadCloser
 	dumpOptions        *DumpOptions
 	marshalBody        any
 	ctx                context.Context
 	uploadFiles        []*FileUpload
-	uploadReader       []io.ReadCloser
 	outputFile         string
 	output             io.Writer
 	trace              *clientTrace

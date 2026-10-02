@@ -1,7 +1,6 @@
 package http3
 
 import (
-	"context"
 	"errors"
 	"io"
 	"sync"
@@ -17,7 +16,7 @@ type Hijacker interface {
 
 var errTooMuchData = errors.New("peer sent too much data")
 
-// The body is used in the requestBody (for a http.Request) and the responseBody (for a http.Response).
+// body tracks content length while reading an HTTP/3 stream.
 type body struct {
 	str *Stream
 
@@ -71,15 +70,6 @@ func (r *body) Close() error {
 	r.str.CancelRead(quic.StreamErrorCode(ErrCodeRequestCanceled))
 	return nil
 }
-
-type requestBody struct {
-	body
-	connCtx      context.Context
-	rcvdSettings <-chan struct{}
-	getSettings  func() *Settings
-}
-
-var _ io.ReadCloser = &requestBody{}
 
 type hijackableBody struct {
 	body body

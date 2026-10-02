@@ -36,6 +36,7 @@ func traceGetConn(req *http.Request, hostPort string) {
 	trace.GetConn(hostPort)
 }
 
+// traceGotConn 报告连接复用状态，使用单调时钟计算空闲时间。
 func traceGotConn(req *http.Request, cc *ClientConn, reused bool) {
 	trace := httptrace.ContextClientTrace(req.Context())
 	if trace == nil || trace.GotConn == nil {
@@ -46,7 +47,7 @@ func traceGotConn(req *http.Request, cc *ClientConn, reused bool) {
 	cc.mu.Lock()
 	ci.WasIdle = len(cc.streams) == 0 && reused
 	if ci.WasIdle && !cc.lastActive.IsZero() {
-		ci.IdleTime = time.Now().Sub(cc.lastActive)
+		ci.IdleTime = time.Since(cc.lastActive)
 	}
 	cc.mu.Unlock()
 

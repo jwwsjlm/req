@@ -36,9 +36,7 @@ var reqWriteExcludeHeader = map[string]bool{
 	PseudoHeaderOderKey: true,
 }
 
+// IsExcluded 判断字段是否由协议单独处理或禁止写入普通 Header 列表。
 func IsExcluded(key string) bool {
-	if reqWriteExcludeHeader[strings.ToLower(key)] {
-		return true
-	}
-	return false
+	return reqWriteExcludeHeader[strings.ToLower(key)]
 }

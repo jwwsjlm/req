@@ -1247,6 +1247,7 @@ func (t *Transport) roundTrip(req *http.Request) (resp *http.Response, err error
 	ctx, cancel := context.WithCancelCause(req.Context())
 
 	// Convert Request.Cancel into context cancellation.
+	//lint:ignore SA1019 Standard transport compatibility for callers still using Request.Cancel.
 	if origReq.Cancel != nil {
 		go awaitLegacyCancel(ctx, cancel, origReq)
 	}
@@ -1337,6 +1338,7 @@ func (t *Transport) roundTrip(req *http.Request) (resp *http.Response, err error
 
 func awaitLegacyCancel(ctx context.Context, cancel context.CancelCauseFunc, req *http.Request) {
 	select {
+	//lint:ignore SA1019 This adapter exists specifically to translate the legacy cancellation channel.
 	case <-req.Cancel:
 		cancel(common.ErrRequestCanceled)
 	case <-ctx.Done():
@@ -1475,10 +1477,6 @@ func (t *Transport) CloseIdleConnections() {
 	if t2 := t.t2; t2 != nil {
 		t2.CloseIdleConnections()
 	}
-}
-
-// resetProxyConfig is used by tests.
-func resetProxyConfig() {
 }
 
 func (t *Transport) connectMethodForRequest(treq *transportRequest) (cm connectMethod, err error) {
@@ -2537,6 +2535,7 @@ func (t *Transport) dialConn(ctx context.Context, cm connectMethod) (pconn *pers
 		}
 	}
 
+	//lint:ignore SA1019 Preserve the ALPN contract of user-provided TLS connections.
 	if s := pconn.tlsState; t.forceHttpVersion != h1 && s != nil && s.NegotiatedProtocolIsMutual && s.NegotiatedProtocol != "" {
 		if s.NegotiatedProtocol == h2internal.NextProtoTLS {
 			if used, err := t.t2.AddConn(pconn.conn, cm.targetAddr); err != nil {

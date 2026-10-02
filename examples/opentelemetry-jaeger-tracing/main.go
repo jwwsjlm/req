@@ -6,7 +6,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
@@ -21,27 +21,24 @@ const serviceName = "github-query"
 
 var githubClient *github.Client
 
+// traceProvider 使用 Jaeger 支持的 OTLP/HTTP，并遵循 OTEL_EXPORTER_OTLP_* 环境变量。
 func traceProvider() (*trace.TracerProvider, error) {
-	// Create the Jaeger exporter
-	ep := os.Getenv("JAEGER_ENDPOINT")
-	if ep == "" {
-		ep = "http://localhost:14268/api/traces"
-	}
-	exp, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(ep)))
-	if err != nil {
-		return nil, err
-	}
-
-	// Record information about this application in a Resource.
-	res, _ := resource.Merge(
+	// 不给稳定属性强加旧 schema，避免与 SDK 默认 Resource 的新 schema 冲突。
+	res, err := resource.Merge(
 		resource.Default(),
-		resource.NewWithAttributes(
-			semconv.SchemaURL,
+		resource.NewSchemaless(
 			semconv.ServiceNameKey.String(serviceName),
 			semconv.ServiceVersionKey.String("v0.1.0"),
 			attribute.String("environment", "test"),
 		),
 	)
+	if err != nil {
+		return nil, err
+	}
+	exp, err := otlptracehttp.New(context.Background())
+	if err != nil {
+		return nil, err
+	}
 
 	// Create the TraceProvider.
 	tp := trace.NewTracerProvider(

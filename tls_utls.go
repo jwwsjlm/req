@@ -168,18 +168,20 @@ func tlsConfigToUTLS(config *tls.Config, endpointHost string) *utls.Config {
 		config = &tls.Config{}
 	}
 	uconfig := &utls.Config{
-		Rand:                               config.Rand,
-		Time:                               config.Time,
-		Certificates:                       tlsCertificatesToUTLS(config.Certificates),
-		RootCAs:                            config.RootCAs,
-		NextProtos:                         config.NextProtos,
-		ServerName:                         tlsServerName(config.ServerName, endpointHost),
-		ClientAuth:                         utls.ClientAuthType(config.ClientAuth),
-		ClientCAs:                          config.ClientCAs,
-		InsecureSkipVerify:                 config.InsecureSkipVerify,
-		CipherSuites:                       config.CipherSuites,
-		PreferServerCipherSuites:           config.PreferServerCipherSuites,
-		SessionTicketsDisabled:             config.SessionTicketsDisabled,
+		Rand:               config.Rand,
+		Time:               config.Time,
+		Certificates:       tlsCertificatesToUTLS(config.Certificates),
+		RootCAs:            config.RootCAs,
+		NextProtos:         config.NextProtos,
+		ServerName:         tlsServerName(config.ServerName, endpointHost),
+		ClientAuth:         utls.ClientAuthType(config.ClientAuth),
+		ClientCAs:          config.ClientCAs,
+		InsecureSkipVerify: config.InsecureSkipVerify,
+		CipherSuites:       config.CipherSuites,
+		//lint:ignore SA1019 Preserve the legacy public TLS field when bridging configs.
+		PreferServerCipherSuites: config.PreferServerCipherSuites,
+		SessionTicketsDisabled:   config.SessionTicketsDisabled,
+		//lint:ignore SA1019 Preserve explicitly supplied legacy session configuration.
 		SessionTicketKey:                   config.SessionTicketKey,
 		MinVersion:                         config.MinVersion,
 		MaxVersion:                         config.MaxVersion,
@@ -351,13 +353,14 @@ func tlsECHKeysToUTLS(keys []tls.EncryptedClientHelloKey) []utls.EncryptedClient
 // 同时保留协商曲线与 HelloRetryRequest 状态。
 func tlsConnectionStateFromUTLS(state utls.ConnectionState) tls.ConnectionState {
 	return tls.ConnectionState{
-		Version:                     state.Version,
-		HandshakeComplete:           state.HandshakeComplete,
-		DidResume:                   state.DidResume,
-		CipherSuite:                 state.CipherSuite,
-		CurveID:                     tls.CurveID(state.CurveID),
-		HelloRetryRequest:           state.HelloRetryRequest,
-		NegotiatedProtocol:          state.NegotiatedProtocol,
+		Version:            state.Version,
+		HandshakeComplete:  state.HandshakeComplete,
+		DidResume:          state.DidResume,
+		CipherSuite:        state.CipherSuite,
+		CurveID:            tls.CurveID(state.CurveID),
+		HelloRetryRequest:  state.HelloRetryRequest,
+		NegotiatedProtocol: state.NegotiatedProtocol,
+		//lint:ignore SA1019 Mirror the complete legacy public connection state without changing its value.
 		NegotiatedProtocolIsMutual:  state.NegotiatedProtocolIsMutual,
 		ServerName:                  state.ServerName,
 		PeerCertificates:            state.PeerCertificates,

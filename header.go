@@ -1,7 +1,6 @@
 package req
 
 import (
-	"io"
 	"net/http"
 	"net/textproto"
 	"sort"
@@ -14,15 +13,6 @@ import (
 )
 
 var headerNewlineToSpace = strings.NewReplacer("\n", " ", "\r", " ")
-
-// stringWriter implements WriteString on a Writer.
-type stringWriter struct {
-	w io.Writer
-}
-
-func (w stringWriter) WriteString(s string) (n int, err error) {
-	return w.w.Write([]byte(s))
-}
 
 // A headerSorter implements sort.Interface by sorting a []keyValues
 // by key. It's used as a pointer, so it can fit in a sort.Interface

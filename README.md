@@ -36,13 +36,16 @@
 - **资源释放和高并发更稳**：对 dump、trace、retry、multipart 上传、parallel download 做了并发和资源释放加固，重点处理 response body、文件句柄、临时目录、goroutine/channel 退出这些长期运行时容易踩的坑。
 - **中文新手文档更完整**：README 和 [示例.md](示例.md) 都使用 `github.com/jwwsjlm/req/v3`，并覆盖从 `go mod init` 到完整业务 client 封装的用法。
 
-## 本轮更新：Brotli、依赖与维护（2026-10-03，未发布）
+## v3.62.0：Brotli、指纹与静态分析（2026-10-03）
 
 - HTTP/1.1、HTTP/2、HTTP/3 的 `br` 响应解压统一使用纯 Go 的 `go-brrr v1.1.1`，保留延迟读取和底层响应关闭，并释放解码器缓冲区。
 - 主模块和 6 个独立示例模块执行 `go get -u -t ./...` 与 `go mod tidy`；quic-go 升至 `v0.63.0`，klauspost/compress 升至 `v1.20.1`。
 - 同步 surf Chrome 152 设计和 uTLS 9 月 24 日提交，更新 Firefox 148 / Safari 26.3；借鉴 resty 修复 BaseURL 尾斜杠、Header 共享和 Digest 挑战兼容性。
 - 删除未使用的 HTTP/2 旧辅助代码，以 `os.MkdirAll` 替代目录包装函数，清理示例中的历史依赖，并修复示例对已移除包级 API 的调用。
 - 接入 GitNexus；中文 Wiki 增加[代码导览、近期更新与审计结果](docs/17-maintenance.md)。Brotli 性能数字引用上游基准，本次未运行本机性能对比。
+- Staticcheck、govulncheck 与测试覆盖主模块及 6 个示例模块；清理无用代码，迁移 Jaeger 示例到 OTLP。结果和保留的兼容性例外见[静态分析与发布检查](docs/18-static-analysis.md)。
+
+**升级注意**：相对 `v3.61.2`，此前已提交的 API 清理也包含在此版本中。旧包级请求函数与部分别名已移除，请按[迁移与兼容](docs/14-migration-compatibility.md)升级；模块路径仍为 `github.com/jwwsjlm/req/v3`。
 
 ## 2026-08-24：uTLS 兼容与模式增强
 

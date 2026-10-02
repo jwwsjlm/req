@@ -19,4 +19,5 @@
 - [15 API 索引](15-api-index.md)
 - [16 上游项目、致谢与许可](16-upstream-credits.md)
 - [17 代码导览、近期更新与审计](17-maintenance.md)
+- [18 静态分析与发布检查](18-static-analysis.md)
 - [可编译示例](examples/README.md)

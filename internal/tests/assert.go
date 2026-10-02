@@ -26,11 +26,11 @@ func AssertNotNil(t *testing.T, v any) {
 	}
 }
 
+// AssertEqual 比较期望值与实际值，并在不相等时记录测试失败。
 func AssertEqual(t *testing.T, e, g any) {
 	if !equal(e, g) {
 		t.Errorf("Expected [%+v], got [%+v]", e, g)
 	}
-	return
 }
 
 func AssertNoError(t *testing.T, err error) {

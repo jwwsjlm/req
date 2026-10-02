@@ -38,3 +38,12 @@ jobs:
         for module in examples/*/go.mod examples/*/*/go.mod; do
           (cd "$(dirname "$module")" && go test ./...)
         done
+    - name: Static analysis
+      if: matrix.os == 'ubuntu-latest'
+      shell: bash
+      run: |
+        go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
+        go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
+        for module in go.mod examples/*/go.mod examples/*/*/go.mod; do
+          (cd "$(dirname "$module")" && staticcheck ./... && govulncheck ./...)
+        done

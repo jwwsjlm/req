@@ -474,6 +474,7 @@ func TestSetCommonHeader(t *testing.T) {
 
 func TestSetCommonHeaderNonCanonical(t *testing.T) {
 	c := tc().SetCommonHeaderNonCanonical("my-Header", "my-value")
+	//lint:ignore SA1008 This test deliberately verifies that noncanonical spelling is preserved.
 	tests.AssertEqual(t, "my-value", c.Headers["my-Header"][0])
 }
 
@@ -536,6 +537,7 @@ func TestSetCommonHeadersNonCanonical(t *testing.T) {
 	c := tc().SetCommonHeadersNonCanonical(map[string]string{
 		"my-Header": "my-value",
 	})
+	//lint:ignore SA1008 This API intentionally bypasses net/http header canonicalization.
 	tests.AssertEqual(t, "my-value", c.Headers["my-Header"][0])
 }
 

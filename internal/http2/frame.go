@@ -290,8 +290,6 @@ type Framer struct {
 	getReadBuf func(size uint32) []byte
 	readBuf    []byte // cache for default getReadBuf
 
-	maxWriteSize uint32 // zero means unlimited; TODO: implement
-
 	w    io.Writer
 	wbuf []byte
 
@@ -481,15 +479,6 @@ func (h2f *Framer) ErrorDetail() error {
 // errFrameTooLarge is returned from Framer.ReadFrame when the peer
 // sends a frame that is larger than declared with SetMaxReadFrameSize.
 var errFrameTooLarge = errors.New("http2: frame too large")
-
-// terminalReadFrameError reports whether err is an unrecoverable
-// error from ReadFrame and no other frames should be read.
-func terminalReadFrameError(err error) bool {
-	if _, ok := err.(StreamError); ok {
-		return false
-	}
-	return err != nil
-}
 
 func (h2f *Framer) streamByID(id uint32) *clientStream {
 	if h2f.cc == nil {
@@ -1441,10 +1430,6 @@ func readUint32(p []byte) (remain []byte, v uint32, err error) {
 		return nil, 0, io.ErrUnexpectedEOF
 	}
 	return p[4:], binary.BigEndian.Uint32(p[:4]), nil
-}
-
-type streamEnder interface {
-	StreamEnded() bool
 }
 
 type headersEnder interface {

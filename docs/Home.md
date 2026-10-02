@@ -18,6 +18,7 @@
 | 长期维护 | [性能与稳定性](12-performance-stability.md)、[迁移与兼容](14-migration-compatibility.md)、[上游项目、致谢与许可](16-upstream-credits.md) | 资源边界、兼容原则、升级清单和第三方归属 |
 | 快速查找 | [生产配方](13-recipes.md)、[API 索引](15-api-index.md) | 可复制组合和按场景查方法 |
 | 近期维护 | [代码导览、近期更新与审计](17-maintenance.md) | GitNexus 使用、Brotli 替换、依赖升级与精简结果 |
+| 发布检查 | [静态分析与 v3.62.0](18-static-analysis.md) | 工具选择、发现处理、漏洞扫描范围与升级说明 |
 
 ## 共同约定
 
