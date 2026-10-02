@@ -2,8 +2,10 @@ package req
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/icholy/digest"
@@ -72,6 +74,7 @@ func (da *digestAuth) prepare(req *http.Request) error {
 	return nil
 }
 
+// HttpRoundTripWrapper 重试可支持的 Digest 挑战，并将规范化后的挑战放入缓存。
 func (da *digestAuth) HttpRoundTripWrapper(rt http.RoundTripper) HttpRoundTripFunc {
 	return HttpRoundTripFunc(func(req *http.Request) (resp *http.Response, err error) {
 		clone, err := cloner(req)
@@ -102,7 +105,7 @@ func (da *digestAuth) HttpRoundTripWrapper(rt http.RoundTripper) HttpRoundTripFu
 
 		// find and cache the challenge
 		host := req.URL.Hostname()
-		chal, err := digest.FindChallenge(res.Header)
+		chal, err := findDigestChallenge(res.Header)
 		if err != nil {
 			// existing cached challenge didn't work, so remove it
 			da.cacheMu.Lock()
@@ -132,6 +135,33 @@ func (da *digestAuth) HttpRoundTripWrapper(rt http.RoundTripper) HttpRoundTripFu
 
 		return rt.RoundTrip(second)
 	})
+}
+
+// findDigestChallenge 沿用依赖库解析器，只补齐 RFC 7616 的 qop 空白与必填 nonce 校验。
+// 在 CanDigest 之前规范化，避免漏掉 "future, auth" 中可用的 auth。
+func findDigestChallenge(headers http.Header) (*digest.Challenge, error) {
+	lastErr := digest.ErrNoChallenge
+	for _, header := range headers.Values("WWW-Authenticate") {
+		if !digest.IsDigest(header) {
+			continue
+		}
+		challenge, err := digest.ParseChallenge(header)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if challenge.Nonce == "" {
+			lastErr = fmt.Errorf("req: digest challenge is missing nonce")
+			continue
+		}
+		for i, qop := range challenge.QOP {
+			challenge.QOP[i] = strings.TrimSpace(qop)
+		}
+		if digest.CanDigest(challenge) {
+			return challenge, nil
+		}
+	}
+	return nil, lastErr
 }
 
 // cloner returns a function which makes clones of the provided request

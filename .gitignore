@@ -32,3 +32,6 @@ Session.vim
 
 # OSX trash
 .DS_Store
+
+# Local GitNexus index and generated viewer
+.gitnexus/

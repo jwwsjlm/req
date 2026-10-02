@@ -14,6 +14,10 @@ HTTP/1.1 与 HTTP/2 的可定制 ClientHello、浏览器 TLS preset、随机指�
 
 uTLS 使用 BSD 3-Clause License。本仓库与 uTLS、Refraction Networking、Google 或其贡献者不存在官方隶属或背书关系。
 
+## molecule-man/go-brrr
+
+HTTP 响应的 Brotli 流式解压使用 [go-brrr](https://github.com/molecule-man/go-brrr)，它是 Brotli 参考实现的纯 Go 移植，使用 MIT License。`andybalholm/brotli` 仍由 uTLS 间接依赖，用于其自身的协议处理。
+
 ## Go Authors 派生代码
 
 仓库中的部分 transport、HTTP/2、text protocol、SOCKS 和辅助代码保留 Go Authors 源文件头，并继续受对应 BSD-style license 约束。

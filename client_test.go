@@ -1415,6 +1415,7 @@ func captureProfileHeaders(t *testing.T, c *Client, method string) http.Header {
 	return captured
 }
 
+// 校验 Chrome 152 Header 与现有 H2/H3 配置组合。
 func TestImpersonateChromeAdvancedProfile(t *testing.T) {
 	c := C().ImpersonateChromeWithOS(BrowserOSWindows)
 	hdr := captureProfileHeaders(t, c, http.MethodGet)
@@ -1425,7 +1426,7 @@ func TestImpersonateChromeAdvancedProfile(t *testing.T) {
 	tests.AssertEqual(t, "?0", hdr.Get("Sec-Ch-Ua-Mobile"))
 	tests.AssertEqual(t, "u=0, i", hdr.Get("Priority"))
 	tests.AssertEqual(t, true, strings.Contains(hdr.Get("User-Agent"), "Windows NT 10.0"))
-	tests.AssertEqual(t, true, strings.Contains(hdr.Get("User-Agent"), "Chrome/133.0.0.0"))
+	tests.AssertEqual(t, true, strings.Contains(hdr.Get("User-Agent"), "Chrome/152.0.0.0"))
 	tests.AssertEqual(t, "sec-ch-ua", hdr[HeaderOderKey][0])
 	tests.AssertEqual(t, uint64(65536), c.Transport.http3AdditionalSettings[HTTP3SettingQpackMaxTableCapacity])
 	tests.AssertEqual(t, uint64(100), c.Transport.http3AdditionalSettings[HTTP3SettingQpackBlockedStreams])
@@ -1453,10 +1454,11 @@ func TestImpersonateChromePostMobileProfile(t *testing.T) {
 	tests.AssertEqual(t, "content-length", hdr[HeaderOderKey][0])
 }
 
+// 随机 OS 仍应保持同一 Chrome 版本标识。
 func TestImpersonateChromeRandomOS(t *testing.T) {
 	c := C().ImpersonateChromeRandomOS()
 	hdr := captureProfileHeaders(t, c, http.MethodGet)
-	tests.AssertEqual(t, true, strings.Contains(hdr.Get("User-Agent"), "133.0.0.0"))
+	tests.AssertEqual(t, true, strings.Contains(hdr.Get("User-Agent"), "152.0.0.0"))
 	tests.AssertEqual(t, true, hdr.Get("Sec-Ch-Ua-Platform") != "")
 }
 
@@ -1504,13 +1506,14 @@ func TestImpersonateFirefoxHTTP3PseudoHeaderOrder(t *testing.T) {
 	tests.AssertEqual(t, ":path", hdr[PseudoHeaderOderKey][3])
 }
 
+// 切到 Firefox 148 后清除 Chrome 专属 Client Hints。
 func TestImpersonateSwitchClearsChromeClientHints(t *testing.T) {
 	c := C().ImpersonateChrome().ImpersonateFirefox()
 	hdr := captureProfileHeaders(t, c, http.MethodGet)
 
 	tests.AssertEqual(t, "", hdr.Get("Sec-Ch-Ua"))
 	tests.AssertEqual(t, "", hdr.Get("Sec-Ch-Ua-Mobile"))
-	tests.AssertEqual(t, true, strings.Contains(hdr.Get("User-Agent"), "Firefox/120.0"))
+	tests.AssertEqual(t, true, strings.Contains(hdr.Get("User-Agent"), "Firefox/148.0"))
 }
 func TestSetTLSFingerprintSpecFactoryConsecutiveHandshakes(t *testing.T) {
 	handler := func(w http.ResponseWriter, r *http.Request) {

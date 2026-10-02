@@ -305,11 +305,11 @@ func (c *Client) SetMultipartBoundaryFunc(fn func() string) *Client {
 }
 
 // SetBaseURL sets the default base URL, will be used if request URL is
-// a relative URL.
+// a relative URL. A trailing slash is preserved for an empty request URL.
 //
-// SetBaseURL 设置默认基础 URL；Request 使用相对 URL 时以它为基准解析。
+// SetBaseURL 设置默认基础 URL；相对 URL 以它为基准，空请求路径保留基础 URL 尾斜杠。
 func (c *Client) SetBaseURL(u string) *Client {
-	c.BaseURL = strings.TrimRight(u, "/")
+	c.BaseURL = u
 	return c
 }
 
@@ -1364,18 +1364,18 @@ func (c *Client) SetXmlUnmarshal(fn func(data []byte, v any) error) *Client {
 	return c
 }
 
-// SetTLSFingerprintChrome uses tls fingerprint of Chrome browser.
+// SetTLSFingerprintChrome uses the Chrome 152 desktop TLS profile with a fresh spec per connection.
 //
-// SetTLSFingerprintChrome 将 TLS ClientHello 指纹设为 Chrome 预设。
+// SetTLSFingerprintChrome 使用 Chrome 152 桌面 TLS 预设，每次连接独立打乱扩展顺序。
 func (c *Client) SetTLSFingerprintChrome() *Client {
-	return c.SetTLSFingerprint(utls.HelloChrome_133)
+	return c.SetTLSFingerprintSpecFactory(chrome152Spec)
 }
 
-// SetTLSFingerprintFirefox uses tls fingerprint of Firefox browser.
+// SetTLSFingerprintFirefox uses the pinned Firefox 148 TLS preset.
 //
-// SetTLSFingerprintFirefox 将 TLS ClientHello 指纹设为 Firefox 预设。
+// SetTLSFingerprintFirefox 将 TLS ClientHello 指纹设为固定的 Firefox 148 预设。
 func (c *Client) SetTLSFingerprintFirefox() *Client {
-	return c.SetTLSFingerprint(utls.HelloFirefox_120)
+	return c.SetTLSFingerprint(utls.HelloFirefox_148)
 }
 
 // SetTLSFingerprintEdge uses tls fingerprint of Edge browser.
@@ -1392,11 +1392,11 @@ func (c *Client) SetTLSFingerprintQQ() *Client {
 	return c.SetTLSFingerprint(utls.HelloQQ_Auto)
 }
 
-// SetTLSFingerprintSafari uses tls fingerprint of Safari browser.
+// SetTLSFingerprintSafari uses the pinned Safari 26.3 TLS preset.
 //
-// SetTLSFingerprintSafari 将 TLS ClientHello 指纹设为 Safari 预设。
+// SetTLSFingerprintSafari 将 TLS ClientHello 指纹设为固定的 Safari 26.3 预设。
 func (c *Client) SetTLSFingerprintSafari() *Client {
-	return c.SetTLSFingerprint(utls.HelloSafari_16_0)
+	return c.SetTLSFingerprint(utls.HelloSafari_26_3)
 }
 
 // SetTLSFingerprint360 uses tls fingerprint of 360 browser.

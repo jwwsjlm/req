@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -479,6 +480,7 @@ func (r *callbackReader) Read(p []byte) (n int, err error) {
 	return
 }
 
+// handleDownload 将响应写入文件或调用方 writer，创建父目录并释放传输资源。
 func handleDownload(c *Client, r *Response) (err error) {
 	if r.Response == nil || !r.Request.isSaveResponse {
 		return nil
@@ -507,7 +509,8 @@ func handleDownload(c *Client, r *Response) (err error) {
 
 		file = filepath.Clean(file)
 
-		if err = util.CreateDirectory(filepath.Dir(file)); err != nil {
+		// MkdirAll 已处理已有目录，无需先 Stat；文件挡住目录路径时保留错误。
+		if err = os.MkdirAll(filepath.Dir(file), 0755); err != nil {
 			return err
 		}
 		output, err = os.Create(file)
@@ -528,7 +531,7 @@ func handleDownload(c *Client, r *Response) (err error) {
 	return
 }
 
-// generate URL
+// parseRequestURL 合并路径和参数；仅在拼接非空相对路径时移除基础 URL 尾斜杠。
 func parseRequestURL(c *Client, r *Request) error {
 	tempURL := r.RawURL
 	if len(r.RawPathParams) > 0 {
@@ -573,7 +576,11 @@ func parseRequestURL(c *Client, r *Request) error {
 			tempURL = "/" + tempURL
 		}
 
-		reqURL, err = url.Parse(c.BaseURL + tempURL)
+		baseURL := c.BaseURL
+		if tempURL != "" {
+			baseURL = strings.TrimRight(baseURL, "/")
+		}
+		reqURL, err = url.Parse(baseURL + tempURL)
 		if err != nil {
 			return err
 		}
@@ -628,6 +635,7 @@ func encodeQueryParams(clientParams, requestParams url.Values) string {
 	return query.Encode()
 }
 
+// parseRequestHeader 继承公共 Header，并复制切片以隔离请求间的追加和修改。
 func parseRequestHeader(c *Client, r *Request) error {
 	if c.Headers == nil {
 		return nil
@@ -637,7 +645,7 @@ func parseRequestHeader(c *Client, r *Request) error {
 	}
 	for k, vs := range c.Headers {
 		if len(r.Headers[k]) == 0 {
-			r.Headers[k] = vs
+			r.Headers[k] = slices.Clone(vs)
 		}
 	}
 	return nil

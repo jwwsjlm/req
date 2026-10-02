@@ -190,6 +190,8 @@ func tlsConfigToUTLS(config *tls.Config, endpointHost string) *utls.Config {
 		EncryptedClientHelloConfigList:     config.EncryptedClientHelloConfigList,
 		EncryptedClientHelloKeys:           tlsECHKeysToUTLS(config.EncryptedClientHelloKeys),
 		PreferSkipResumptionOnNilExtension: config.ClientSessionCache != nil,
+		// 无缓存票据时省略空 PSK，已有票据时保留真实会话恢复扩展。
+		OmitEmptyPsk: true,
 	}
 	if config.GetClientCertificate != nil {
 		uconfig.GetClientCertificate = tlsGetClientCertificateToUTLS(config.GetClientCertificate)
@@ -343,17 +345,18 @@ func tlsECHKeysToUTLS(keys []tls.EncryptedClientHelloKey) []utls.EncryptedClient
 }
 
 // tlsConnectionStateFromUTLS centralizes the public state shared by uTLS and
-// crypto/tls. uTLS v1.8.2 doesn't expose CurveID or HelloRetryRequest, so those
-// newer crypto/tls fields retain their zero values.
+// crypto/tls, including the negotiated curve and HelloRetryRequest state.
 //
 // tlsConnectionStateFromUTLS 集中转换 uTLS 与 crypto/tls 共有的公开状态。
-// uTLS v1.8.2 未公开 CurveID 和 HelloRetryRequest，因此这些新字段保持零值。
+// 同时保留协商曲线与 HelloRetryRequest 状态。
 func tlsConnectionStateFromUTLS(state utls.ConnectionState) tls.ConnectionState {
 	return tls.ConnectionState{
 		Version:                     state.Version,
 		HandshakeComplete:           state.HandshakeComplete,
 		DidResume:                   state.DidResume,
 		CipherSuite:                 state.CipherSuite,
+		CurveID:                     tls.CurveID(state.CurveID),
+		HelloRetryRequest:           state.HelloRetryRequest,
 		NegotiatedProtocol:          state.NegotiatedProtocol,
 		NegotiatedProtocolIsMutual:  state.NegotiatedProtocolIsMutual,
 		ServerName:                  state.ServerName,

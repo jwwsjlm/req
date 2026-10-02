@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/jwwsjlm/req/v3/http2"
-	utls "github.com/refraction-networking/utls"
 )
 
 // Identical for both Blink-based browsers (Chrome, Chromium, etc.) and WebKit-based browsers (Safari, etc.)
@@ -131,11 +130,11 @@ var (
 	}
 
 	chromeUserAgentByOS = map[BrowserOS]string{
-		BrowserOSWindows: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-		BrowserOSMacOS:   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-		BrowserOSLinux:   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-		BrowserOSAndroid: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36",
-		BrowserOSIOS:     "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/133.0.0.0 Mobile/15E148 Safari/604.1",
+		BrowserOSWindows: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+		BrowserOSMacOS:   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+		BrowserOSLinux:   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+		BrowserOSAndroid: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Mobile Safari/537.36",
+		BrowserOSIOS:     "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/152.0.0.0 Mobile/15E148 Safari/604.1",
 	}
 
 	chromePlatformByOS = map[BrowserOS]string{
@@ -147,7 +146,7 @@ var (
 	}
 
 	chromeBaseHeaders = map[string]string{
-		"sec-ch-ua":       `"Not:A-Brand";v="99", "Google Chrome";v="133", "Chromium";v="133"`,
+		"sec-ch-ua":       `"Not:A-Brand";v="99", "Google Chrome";v="152", "Chromium";v="152"`,
 		"accept-encoding": "gzip, deflate, br, zstd",
 		"accept-language": "en-US,en;q=0.9",
 	}
@@ -196,19 +195,19 @@ func chromeBrowserProfile(os BrowserOS) *browserHeaderProfile {
 	}
 }
 
-// ImpersonateChrome impersonates Chrome browser (version aligned with uTLS Chrome 133).
-// ImpersonateChrome 使用 macOS Header、TLS、HTTP/2 和 HTTP/3 配置模拟 Chrome 133。
+// ImpersonateChrome uses Chrome 152 headers and the desktop TLS profile adapted from surf.
+// ImpersonateChrome 使用 macOS Header、TLS、HTTP/2 和 HTTP/3 配置模拟 Chrome 152。
 func (c *Client) ImpersonateChrome() *Client {
 	return c.ImpersonateChromeWithOS(BrowserOSMacOS)
 }
 
 // ImpersonateChromeWithOS impersonates Chrome browser with the specified OS profile.
-// ImpersonateChromeWithOS 使用指定操作系统的 Header，并应用 Chrome 133 的传输层配置；
+// ImpersonateChromeWithOS 使用指定操作系统的 Header，并应用 Chrome 152 的传输层配置；
 // 不支持的操作系统值会回退到 macOS，BrowserOSRandom 会随机选择。
 func (c *Client) ImpersonateChromeWithOS(os BrowserOS) *Client {
 	profile := chromeBrowserProfile(os)
 	c.setBrowserProfile(profile)
-	c.SetTLSFingerprint(utls.HelloChrome_133)
+	c.SetTLSFingerprintChrome()
 	c.Transport.
 		SetHTTP2SettingsFrame(chromeHttp2Settings...).
 		SetHTTP2ConnectionFlow(15663105).
@@ -227,7 +226,7 @@ func (c *Client) ImpersonateChromeWithOS(os BrowserOS) *Client {
 }
 
 // ImpersonateChromeRandomOS impersonates Chrome with a random OS profile.
-// ImpersonateChromeRandomOS 使用随机受支持的操作系统配置模拟 Chrome 133。
+// ImpersonateChromeRandomOS 使用随机受支持的操作系统配置模拟 Chrome 152。
 func (c *Client) ImpersonateChromeRandomOS() *Client {
 	return c.ImpersonateChromeWithOS(BrowserOSRandom)
 }
@@ -319,11 +318,11 @@ var (
 	}
 
 	firefoxUserAgentByOS = map[BrowserOS]string{
-		BrowserOSWindows: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
-		BrowserOSMacOS:   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:120.0) Gecko/20100101 Firefox/120.0",
-		BrowserOSLinux:   "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0",
-		BrowserOSAndroid: "Mozilla/5.0 (Android 14; Mobile; rv:120.0) Gecko/120.0 Firefox/120.0",
-		BrowserOSIOS:     "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/120.0 Mobile/15E148 Safari/605.1.15",
+		BrowserOSWindows: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0",
+		BrowserOSMacOS:   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:148.0) Gecko/20100101 Firefox/148.0",
+		BrowserOSLinux:   "Mozilla/5.0 (X11; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0",
+		BrowserOSAndroid: "Mozilla/5.0 (Android 14; Mobile; rv:148.0) Gecko/148.0 Firefox/148.0",
+		BrowserOSIOS:     "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/148.0 Mobile/15E148 Safari/605.1.15",
 	}
 
 	firefoxBaseHeaders = map[string]string{
@@ -371,19 +370,19 @@ func firefoxBrowserProfile(os BrowserOS) *browserHeaderProfile {
 	}
 }
 
-// ImpersonateFirefox impersonates Firefox browser (version 120).
-// ImpersonateFirefox 使用 macOS Header、TLS、HTTP/2 和 HTTP/3 配置模拟 Firefox 120。
+// ImpersonateFirefox impersonates Firefox browser (version 148).
+// ImpersonateFirefox 使用 macOS Header、TLS、HTTP/2 和 HTTP/3 配置模拟 Firefox 148。
 func (c *Client) ImpersonateFirefox() *Client {
 	return c.ImpersonateFirefoxWithOS(BrowserOSMacOS)
 }
 
 // ImpersonateFirefoxWithOS impersonates Firefox browser with the specified OS profile.
-// ImpersonateFirefoxWithOS 使用指定操作系统的 Header，并应用 Firefox 120 的传输层配置；
+// ImpersonateFirefoxWithOS 使用指定操作系统的 Header，并应用 Firefox 148 的传输层配置；
 // 不支持的操作系统值会回退到 macOS，BrowserOSRandom 会随机选择。
 func (c *Client) ImpersonateFirefoxWithOS(os BrowserOS) *Client {
 	profile := firefoxBrowserProfile(os)
 	c.setBrowserProfile(profile)
-	c.SetTLSFingerprint(utls.HelloFirefox_120)
+	c.SetTLSFingerprintFirefox()
 	c.Transport.
 		SetHTTP2SettingsFrame(firefoxHttp2Settings...).
 		SetHTTP2ConnectionFlow(12517377).
@@ -404,7 +403,7 @@ func (c *Client) ImpersonateFirefoxWithOS(os BrowserOS) *Client {
 }
 
 // ImpersonateFirefoxRandomOS impersonates Firefox with a random OS profile.
-// ImpersonateFirefoxRandomOS 使用随机受支持的操作系统配置模拟 Firefox 120。
+// ImpersonateFirefoxRandomOS 使用随机受支持的操作系统配置模拟 Firefox 148。
 func (c *Client) ImpersonateFirefoxRandomOS() *Client {
 	return c.ImpersonateFirefoxWithOS(BrowserOSRandom)
 }
@@ -446,7 +445,7 @@ var (
 		"sec-fetch-dest":  "document",
 		"accept-language": "zh-CN,zh-Hans;q=0.9",
 		"sec-fetch-mode":  "navigate",
-		"user-agent":      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Safari/605.1.15",
+		"user-agent":      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15",
 	}
 
 	safariHeaderPriority = http2.PriorityParam{
@@ -456,15 +455,15 @@ var (
 	}
 )
 
-// ImpersonateSafari uses Safari 16.6-style headers and user agent with the
-// uTLS Safari 16.0 preset. It currently has no dedicated HTTP/3 profile.
-// ImpersonateSafari 使用 Safari 16.6 风格的 Header 与 User-Agent，并配合 uTLS
-// Safari 16.0 预设；当前不提供专用 HTTP/3 profile。
+// ImpersonateSafari uses Safari 26.3-style headers and user agent with the
+// uTLS Safari 26.3 preset. It currently has no dedicated HTTP/3 profile.
+// ImpersonateSafari 使用 Safari 26.3 风格的 Header 与 User-Agent，并配合 uTLS
+// Safari 26.3 预设；当前不提供专用 HTTP/3 profile。
 func (c *Client) ImpersonateSafari() *Client {
 	c.resetBrowserTransportProfile()
 	c.browserProfile = nil
 	c.clearBrowserProfileHeaders()
-	c.SetTLSFingerprint(utls.HelloSafari_16_0)
+	c.SetTLSFingerprintSafari()
 	c.Transport.
 		SetHTTP2SettingsFrame(safariHttp2Settings...).
 		SetHTTP2ConnectionFlow(10485760)

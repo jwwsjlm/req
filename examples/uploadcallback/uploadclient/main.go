@@ -32,9 +32,10 @@ func (r *SlowReader) Read(p []byte) (int, error) {
 	return n, nil
 }
 
+// main 通过 Client.R 创建流式上传请求，避免使用已移除的包级包装 API。
 func main() {
 	size := 10 * 1024 * 1024
-	req.SetFileUpload(req.FileUpload{
+	req.C().R().SetFileUpload(req.FileUpload{
 		ParamName: "file",
 		FileName:  "test.txt",
 		GetFileContent: func() (io.ReadCloser, error) {

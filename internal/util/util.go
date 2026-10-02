@@ -2,7 +2,6 @@ package util
 
 import (
 	"encoding/base64"
-	"os"
 	"reflect"
 	"strings"
 )
@@ -67,16 +66,4 @@ func basicAuth(username, password string) string {
 // BasicAuthHeaderValue return the header of basic auth.
 func BasicAuthHeaderValue(username, password string) string {
 	return "Basic " + basicAuth(username, password)
-}
-
-// CreateDirectory create the directory.
-func CreateDirectory(dir string) (err error) {
-	if _, err = os.Stat(dir); err != nil {
-		if os.IsNotExist(err) {
-			if err = os.MkdirAll(dir, 0755); err != nil {
-				return
-			}
-		}
-	}
-	return
 }

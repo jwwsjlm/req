@@ -16,9 +16,9 @@ profile 会组合 Header、Header 顺序、HTTP/2 参数、HTTP/1.1/2 的 uTLS C
 
 | Profile | Header / UA | HTTP/1.1、HTTP/2 TLS | HTTP/2 | HTTP/3 |
 | --- | --- | --- | --- | --- |
-| Chrome | 固定 Chrome 133；OS 主要改变 UA、Client Hints 与 Header | 固定 uTLS `HelloChrome_133` | Chrome-like SETTINGS、flow、priority | Go `crypto/tls` + quic-go 的 Chrome-like 配置 |
-| Firefox | 固定 Firefox 120；OS 主要改变 UA 与 Header | 固定 uTLS `HelloFirefox_120` | Firefox-like SETTINGS、flow、stream ID、priority | Go `crypto/tls` + quic-go 的 Firefox-like 配置 |
-| Safari | Safari 16.6 风格 Header/UA | uTLS `HelloSafari_16_0` | Safari-like SETTINGS、flow、priority | 没有专用 Safari H3 profile；需要时在其后显式配置 H3 |
+| Chrome | 固定 Chrome 152；OS 主要改变 UA、Client Hints 与 Header | 基于 surf 的 Chrome 152 桌面 spec，每次握手独立随机排序 | Chrome-like SETTINGS、flow、priority | Go `crypto/tls` + quic-go 的 Chrome-like 配置 |
+| Firefox | 固定 Firefox 148；OS 主要改变 UA 与 Header | 固定 uTLS `HelloFirefox_148` | Firefox-like SETTINGS、flow、stream ID、priority | Go `crypto/tls` + quic-go 的 Firefox-like 配置 |
+| Safari | Safari 26.3 风格 Header/UA | uTLS `HelloSafari_26_3` | Safari-like SETTINGS、flow、priority | 没有专用 Safari H3 profile；需要时在其后显式配置 H3 |
 
 指定 Android 或 iOS 不会自动把 Chrome/Firefox 的 TLS preset 变成另一套移动端 ClientHello；目前主要改变 UA、Client Hints 和 Header。`Auto` preset 可能随 uTLS 升级漂移，因此内置 Chrome、Firefox、Safari 已固定明确版本。
 
@@ -94,11 +94,11 @@ client := req.C().SetTLSFingerprintSpecFactory(factory)
 
 `Client.Clone` 会把指纹握手重新绑定到 clone 自己的 TLS config，原 client 与 clone 可以使用不同 CA、SNI 和验证回调。
 
-两个验证回调都会执行，且其错误会终止握手；但所有从 uTLS 转换出的标准 `tls.ConnectionState`（包括验证回调、trace、`Response.TLS` 和连接状态）都有同一边界：uTLS v1.8.2 没有公开 Go 1.26 的 `CurveID`、`HelloRetryRequest`，也无法重建 `ExportKeyingMaterial` 的私有 exporter。前两个字段保持零值；验证/ECH 回调内误调 exporter 会转为握手错误，而在响应、trace 或连接状态上直接调用该方法会触发标准库 nil exporter panic，因此不要调用。安全策略若依赖这些信息或 keying material，应继续使用标准 TLS，或通过 `SetTLSHandshake` 提供能无损返回标准状态的实现。
+两个验证回调都会执行，且其错误会终止握手。当前固定的 uTLS 提交公开了 `CurveID` 和 `HelloRetryRequest`，req 会将它们保留到标准 `tls.ConnectionState`，包括验证回调、trace、`Response.TLS` 和连接状态。跨实现转换仍无法重建 `ExportKeyingMaterial` 的私有 exporter：验证/ECH 回调内误调 exporter 会转为握手错误，在响应、trace 或连接状态上直接调用该方法仍会 panic。依赖 keying material 时，应使用标准 TLS，或通过 `SetTLSHandshake` 提供能无损返回标准状态的实现。
 
 动态客户端证书回调能获得证书选择所需的公开字段；Go 没有公开构造 `CertificateRequestInfo` 私有 Context 的 API，因此该 Context 无法无损跨实现传递。服务端专用的 TLS callback 不属于 req 客户端握手路径。
 
-session cache 适配不会凭空给 preset 增加真实 PSK extension。只有所选 ClientHello 本身支持真实恢复时才可能得到 `DidResume=true`；例如 `HelloGolang` 的 TLS 1.3 恢复已做真实双连接测试，而普通 Chrome 133 parrot preset 缺少真实 TLS 1.3 `PreSharedKeyExtension`，会安全跳过 TLS 1.3 恢复。这里不对 TLS 1.2 session ticket 行为作额外承诺。
+session cache 适配不会给任意自定义 preset 自动添加 PSK。Chrome 152 工厂已携带真实 `PreSharedKeyExtension`；没有缓存票据时省略空 PSK，有有效票据时可以恢复，且 PSK 始终位于扩展列表末尾。Chrome 152 与 `HelloGolang` 的 TLS 1.3 恢复均有本地真实双连接测试；自定义 spec 仍需自行提供恢复扩展。`SetTLSFingerprint(utls.HelloChrome_133)` 继续使用调用方明确选定的旧 preset。
 
 `EnableInsecureSkipVerify` 只用于明确受控的测试。若使用它配合 `VerifyConnection` 做证书固定，必须保证回调返回错误时请求失败；本仓库已为 uTLS 路径加入真实握手回归测试。
 

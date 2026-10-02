@@ -7,10 +7,7 @@ package http2
 import (
 	"bufio"
 	"crypto/tls"
-	"net/http"
 	"os"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -77,16 +74,6 @@ func validWireHeaderFieldName(v string) bool {
 	return true
 }
 
-func httpCodeString(code int) string {
-	switch code {
-	case 200:
-		return "200"
-	case 404:
-		return "404"
-	}
-	return strconv.Itoa(code)
-}
-
 // bufWriterPoolBufferSize is the size of bufio.Writer's
 // buffers created using bufWriterPool.
 //
@@ -108,20 +95,6 @@ func mustUint31(v int32) uint32 {
 	return uint32(v)
 }
 
-// bodyAllowedForStatus reports whether a given response status code
-// permits a body. See RFC 7230, section 3.3.
-func bodyAllowedForStatus(status int) bool {
-	switch {
-	case status >= 100 && status <= 199:
-		return false
-	case status == 204:
-		return false
-	case status == 304:
-		return false
-	}
-	return true
-}
-
 type httpError struct {
 	_       incomparable
 	msg     string
@@ -138,41 +111,6 @@ var errH2Timeout error = &httpError{msg: "http2: timeout awaiting response heade
 
 type connectionStater interface {
 	ConnectionState() tls.ConnectionState
-}
-
-var sorterPool = sync.Pool{New: func() any { return new(sorter) }}
-
-type sorter struct {
-	v []string // owned by sorter
-}
-
-func (s *sorter) Len() int { return len(s.v) }
-
-func (s *sorter) Swap(i, j int) { s.v[i], s.v[j] = s.v[j], s.v[i] }
-
-func (s *sorter) Less(i, j int) bool { return s.v[i] < s.v[j] }
-
-// Keys returns the sorted keys of h.
-//
-// The returned slice is only valid until s used again or returned to
-// its pool.
-func (s *sorter) Keys(h http.Header) []string {
-	keys := s.v[:0]
-	for k := range h {
-		keys = append(keys, k)
-	}
-	s.v = keys
-	sort.Sort(s)
-	return keys
-}
-
-func (s *sorter) SortStrings(ss []string) {
-	// Our sorter works on s.v, which sorter owns, so
-	// stash it away while we sort the user's buffer.
-	save := s.v
-	s.v = ss
-	sort.Sort(s)
-	s.v = save
 }
 
 // validPseudoPath reports whether v is a valid :path pseudo-header

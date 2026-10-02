@@ -2,7 +2,7 @@
 
 The repository's original project code remains licensed under the MIT License
 in `LICENSE` unless otherwise noted. This file records the notices for Go
-Authors code adapted into this repository and for uTLS. It is not a dependency
+Authors code adapted into this repository, surf profile data, and uTLS. It is not a dependency
 SBOM; all other dependencies remain governed by their own license files.
 
 ## Go standard library derived code
@@ -75,3 +75,30 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 The project is not affiliated with or endorsed by uTLS, Refraction
 Networking, Google, or their contributors.
+
+## enetx/surf
+
+The Chrome 152 trust-anchor data and profile design in `tls_fingerprint.go`
+are adapted from `enetx/surf` v1.0.206, `profiles/chrome/tls.go` and `ja.go`.
+
+MIT License
+
+Copyright (c) 2024 enetx
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

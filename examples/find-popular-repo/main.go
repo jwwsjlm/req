@@ -19,8 +19,9 @@ func main() {
 	fmt.Printf("The most popular repo of %s is %s, which have %d stars\n", username, repo, star)
 }
 
+// init 配置共享 Client，后续请求通过它的 R 方法创建。
 func init() {
-	req.EnableDebugLog().
+	req.DefaultClient().EnableDebugLog().
 		EnableTraceAll().
 		EnableDumpEachRequest().
 		SetCommonErrorResult(&ErrorMessage{}).
@@ -51,13 +52,14 @@ func (msg *ErrorMessage) Error() string {
 	return fmt.Sprintf("API Error: %s", msg.Message)
 }
 
+// findTheMostPopularRepo 复用已配置的默认 Client 查询仓库。
 func findTheMostPopularRepo(username string) (repo string, star int, err error) {
 	var popularRepo Repo
 	var resp *req.Response
 
 	for page := 1; ; page++ {
 		repos := []*Repo{}
-		resp, err = req.SetHeader("Accept", "application/vnd.github.v3+json").
+		resp, err = req.DefaultClient().R().SetHeader("Accept", "application/vnd.github.v3+json").
 			SetQueryParams(map[string]string{
 				"type":      "owner",
 				"page":      strconv.Itoa(page),

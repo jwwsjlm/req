@@ -32,3 +32,9 @@ jobs:
         cache: true
     - name: Test
       run: go test ./... -coverprofile=coverage.txt
+    - name: Test example modules
+      shell: bash
+      run: |
+        for module in examples/*/go.mod examples/*/*/go.mod; do
+          (cd "$(dirname "$module")" && go test ./...)
+        done

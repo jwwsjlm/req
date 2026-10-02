@@ -36,7 +36,15 @@
 - **资源释放和高并发更稳**：对 dump、trace、retry、multipart 上传、parallel download 做了并发和资源释放加固，重点处理 response body、文件句柄、临时目录、goroutine/channel 退出这些长期运行时容易踩的坑。
 - **中文新手文档更完整**：README 和 [示例.md](示例.md) 都使用 `github.com/jwwsjlm/req/v3`，并覆盖从 `go mod init` 到完整业务 client 封装的用法。
 
-## 本轮更新：uTLS 兼容与模式增强
+## 本轮更新：Brotli、依赖与维护（2026-10-03，未发布）
+
+- HTTP/1.1、HTTP/2、HTTP/3 的 `br` 响应解压统一使用纯 Go 的 `go-brrr v1.1.1`，保留延迟读取和底层响应关闭，并释放解码器缓冲区。
+- 主模块和 6 个独立示例模块执行 `go get -u -t ./...` 与 `go mod tidy`；quic-go 升至 `v0.63.0`，klauspost/compress 升至 `v1.20.1`。
+- 同步 surf Chrome 152 设计和 uTLS 9 月 24 日提交，更新 Firefox 148 / Safari 26.3；借鉴 resty 修复 BaseURL 尾斜杠、Header 共享和 Digest 挑战兼容性。
+- 删除未使用的 HTTP/2 旧辅助代码，以 `os.MkdirAll` 替代目录包装函数，清理示例中的历史依赖，并修复示例对已移除包级 API 的调用。
+- 接入 GitNexus；中文 Wiki 增加[代码导览、近期更新与审计结果](docs/17-maintenance.md)。Brotli 性能数字引用上游基准，本次未运行本机性能对比。
+
+## 2026-08-24：uTLS 兼容与模式增强
 
 - **标准 TLS 配置兼容桥**：uTLS 路径保留显式 SNI、mTLS、验证回调的执行/错误语义、session cache、renegotiation 和 ECH 客户端配置；ClientHello 形状字段由所选指纹 spec 主导，完整边界见 TLS 专题文档。
 - **Clone 隔离**：指纹握手会重新绑定到 clone 自己的 `tls.Config`，原 client 与 clone 可使用不同 CA、SNI 和验证策略。
@@ -933,7 +941,7 @@ client := req.C().
 - Chrome/Firefox 使用 method-aware headers，GET/POST 会采用不同请求头；Safari 当前使用一组静态 common headers。
 - Chrome/Firefox 明确提供的 HTTP/3 SETTINGS、TLS profile、QUIC profile；Safari 当前没有专用 H3 profile。
 
-Chrome 固定 uTLS Chrome 133，Firefox 固定 Firefox 120，Safari Header/UA 为 16.6 风格而 TLS preset 为 Safari 16.0。OS 选项主要改变 UA、Client Hints 和 Header，不代表 TLS ClientHello 会随 OS 完全变化。
+Chrome 使用基于 surf 的 Chrome 152 桌面 TLS profile，Firefox 固定 Firefox 148，Safari 固定 Safari 26.3；Header/UA 随版本同步。OS 选项主要改变 UA、Client Hints 和 Header，不代表 TLS ClientHello 会随 OS 完全变化。
 
 应在第一个请求前完成配置。profile 切换会清理未来连接的旧 Header/H2/H3 状态，但不会改写已经建立的连接；切换身份优先使用新 client 或尚未使用的 clone。
 
@@ -1016,7 +1024,7 @@ client.Transport.SetTLSClientConfig(&tls.Config{
 })
 ```
 
-启用 uTLS 指纹后，上述标准配置中的显式 `ServerName`、客户端证书/动态证书回调、两个验证回调、session cache、renegotiation、key log 和 ECH 客户端配置都会桥接到 uTLS。`MinVersion`、`MaxVersion`、`CipherSuites`、`CurvePreferences`、`NextProtos` 会先转换，但浏览器、随机或自定义指纹 spec 会按自身扩展重写这些 ClientHello 形状字段；不要把它们当成 preset 下的强约束。`Client.Clone` 会使用 clone 自己的 TLS config。uTLS v1.8.2 无法为标准 `ConnectionState` 补出 `CurveID`、`HelloRetryRequest` 或私有 keying-material exporter；安全策略依赖这些信息时请阅读 [TLS 兼容桥边界](docs/10-browser-tls-fingerprint.md)。TLS 1.3 session 恢复还要求所选 ClientHello 自带真实 `PreSharedKeyExtension`；普通 Chrome parrot preset 不会被强行添加该扩展。
+启用 uTLS 指纹后，上述标准配置中的显式 `ServerName`、客户端证书/动态证书回调、两个验证回调、session cache、renegotiation、key log 和 ECH 客户端配置都会桥接到 uTLS。`MinVersion`、`MaxVersion`、`CipherSuites`、`CurvePreferences`、`NextProtos` 会先转换，但浏览器、随机或自定义指纹 spec 会按自身扩展重写这些 ClientHello 形状字段；不要把它们当成 preset 下的强约束。`Client.Clone` 会使用 clone 自己的 TLS config。当前 uTLS 会保留标准状态中的 `CurveID` 和 `HelloRetryRequest`，但跨实现转换仍无法重建私有 keying-material exporter；依赖 keying material 时请使用标准 TLS，具体边界见 TLS 专题文档。TLS 1.3 session 恢复还要求所选 ClientHello 自带真实 `PreSharedKeyExtension`；普通 Chrome parrot preset 不会被强行添加该扩展。
 
 ## HTTP/3 常用组合
 
@@ -1634,7 +1642,7 @@ for name, client := range clients {
 }
 ```
 
-我在 `2026-06-03` 本机跑到的结果摘要：
+我在 `2026-06-03` 本机跑到的结果摘要（历史 profile；不代表本轮 Chrome 152 / Firefox 148 的指纹值）：
 
 | 模式 | HTTP | User-Agent | JA4 | Peetprint Hash | HTTP/2 Akamai Hash |
 | --- | --- | --- | --- | --- | --- |

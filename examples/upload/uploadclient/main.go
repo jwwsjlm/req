@@ -4,9 +4,10 @@ import (
 	"github.com/jwwsjlm/req/v3"
 )
 
+// main 使用独立 Client 配置 dump，再创建一次上传请求。
 func main() {
-	req.EnableDumpAllWithoutRequestBody()
-	req.SetFile("files", "../../../README.md").
+	c := req.C().EnableDumpAllWithoutRequestBody()
+	c.R().SetFile("files", "../../../README.md").
 		SetFile("files", "../../../LICENSE").
 		SetFormData(map[string]string{
 			"name":  "imroc",
